@@ -38,13 +38,16 @@
             <div class="area-dropzones" id="areaDropzoneLme">
                 <div class="barra-dropzone-header" id="headerDropzoneLme">
                     <span class="label-dropzone">ANEXAR PDF'S</span>
-                    <!-- FUNCIONALIDADE NOVA: limpa os PDFs/dados desta consulta.
-                         Some sozinho quando a dropzone é recolhida (ver classe
-                         .btn-limpar-dropzone no style.css) — com a área fechada,
-                         a barra volta a mostrar só o botão de recolher/expandir,
-                         como já era antes dessa funcionalidade existir. -->
-                    <button type="button" id="btnLimparLme" class="btn-limpar-dropzone" title="Limpa os PDFs e dados desta consulta para começar outra">LIMPAR</button>
                     <button type="button" id="toggleDropzoneLme" class="toggleDropzone" title="Recolher / Expandir Dropzones" aria-label="Recolher ou expandir área de anexos">▼</button>
+                    <!-- FUNCIONALIDADE NOVA: limpa os PDFs/dados desta consulta.
+                         Fica encostada na borda direita da barra (mesmo recuo do
+                         botão SALVAR, na barra do banco acima) e esmaece/encolhe
+                         suavemente quando a dropzone é recolhida (ver classe
+                         .btn-limpar-dropzone no style.css) — com a área fechada,
+                         a barra volta a mostrar só o rótulo + o botão de
+                         recolher/expandir, como já era antes dessa funcionalidade
+                         existir. -->
+                    <button type="button" id="btnLimparLme" class="btn-limpar-dropzone" title="Limpa os PDFs e dados desta consulta para começar outra">LIMPAR</button>
                 </div>
                 <div class="conteudo-dropzones">
                     <!-- Dropzone 1: PDF de Agendamento -->
@@ -192,8 +195,8 @@
         <div class="area-dropzones" id="areaDropzoneExcel">
             <div class="barra-dropzone-header" id="headerDropzoneExcel">
                 <span class="label-dropzone">ANEXAR PDF'S</span>
-                <button type="button" id="btnLimparExcel" class="btn-limpar-dropzone" title="Limpa os PDFs e dados desta consulta para começar outra">LIMPAR</button>
                 <button type="button" id="toggleDropzoneExcel" class="toggleDropzone" title="Recolher / Expandir Dropzones" aria-label="Recolher ou expandir área de anexos">▼</button>
+                <button type="button" id="btnLimparExcel" class="btn-limpar-dropzone" title="Limpa os PDFs e dados desta consulta para começar outra">LIMPAR</button>
             </div>
             <div class="conteudo-dropzones">
                 <div id="dropZoneExcelAgendamento" class="dropZoneDoc">
@@ -239,8 +242,8 @@
             <div class="area-dropzones" id="areaDropzoneDoc">
                 <div class="barra-dropzone-header" id="headerDropzoneDoc">
                     <span class="label-dropzone">ANEXAR PDF'S</span>
-                    <button type="button" id="btnLimparDoc" class="btn-limpar-dropzone" title="Limpa os PDFs e dados desta consulta para começar outra">LIMPAR</button>
                     <button type="button" id="toggleDropzoneDoc" class="toggleDropzone" title="Recolher / Expandir Dropzones" aria-label="Recolher ou expandir área de anexos">▼</button>
+                    <button type="button" id="btnLimparDoc" class="btn-limpar-dropzone" title="Limpa os PDFs e dados desta consulta para começar outra">LIMPAR</button>
                 </div>
                 <div class="conteudo-dropzones">
                     <div id="dropZoneDocConsulta" class="dropZoneDoc">

@@ -267,6 +267,7 @@ h3 {
     font-weight: bold;
     cursor: pointer;
     user-select: none;
+    position: relative;   /* ponto de referência para o botão "LIMPAR" (ver abaixo) */
     transition: background-color 0.2s ease, margin-bottom 0.35s ease;
 }
 
@@ -295,34 +296,69 @@ h3 {
 
 /* ------------------------------------------------------------
    FUNCIONALIDADE NOVA — BOTÃO "LIMPAR" DA BARRA "ANEXAR PDF'S"
-   Fica ao lado do botão de recolher/expandir (".toggleDropzone"),
-   mas é uma classe própria — antes ele reaproveitava ".toggleDropzone"
-   e por isso girava 180° junto com a seta ao recolher a dropzone, o
-   que não fazia sentido (o "LIMPAR" não é uma seta indicando estado).
-   Quando a área é recolhida ele simplesmente some, e a barra volta a
-   mostrar só o rótulo + o botão de recolher/expandir — igual a antes
-   dessa funcionalidade existir.
+
+   Posição: fica encostado na borda direita da barra, no MESMO recuo
+   (15px, igual ao "padding" da própria barra) que o botão "SALVAR" já
+   usa na barra do banco logo acima — por isso é posicionado com
+   "position:absolute; right:15px" em vez de entrar no grupo
+   centralizado do rótulo + botão de recolher. Visualmente ele fica à
+   direita do botão de recolher/expandir, não mais entre ele e o
+   rótulo.
+
+   Visual: ganha borda e "hover" próprios para se diferenciar
+   claramente do botão de recolher (que é só um ícone sem borda) —
+   antes os dois eram visualmente parecidos demais.
+
+   Transição: ao recolher a dropzone, em vez de sumir bruscamente
+   (display:none), ele esmaece e encolhe suavemente — mesma técnica
+   (opacity + transform + visibility) já usada no botão do rodapé
+   (#toggleAbas) e no select "Conferência/Laudo" (#tipoLaudoConferenciaSelect).
    ------------------------------------------------------------ */
 .btn-limpar-dropzone {
-    height: 30px;
+    position: absolute;
+    right: 15px;
+    top: 50%;
+
+    height: 26px;
     margin: 0;
     padding: 0 12px;
-    border: none;
-    border-radius: 0;
+    border: 1px solid #c7d59f;      /* borda própria: diferencia do botão de recolher */
+    border-radius: 2px;
     background: transparent;
-    color: white;
+    color: #c7d59f;
     font-weight: bold;
     cursor: pointer;
     font-size: 11px;
     letter-spacing: 0.5px;
+
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(-50%) scale(1);
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease,
+                opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                visibility 0.35s;
 }
 
 .btn-limpar-dropzone:hover {
-    background: #1d2911;
+    background: #c7d59f;
+    color: #283618;
+    border-color: #c7d59f;
 }
 
+.btn-limpar-dropzone:focus-visible {
+    outline: 2px solid #ffffff;
+    outline-offset: 2px;
+}
+
+/* Estado recolhido: esmaece e encolhe suavemente, em vez de sumir de
+   uma vez — e para de capturar clique/toque enquanto está assim. */
 .area-dropzones.recolhido .btn-limpar-dropzone {
-    display: none;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(-50%) scale(0.85);
 }
 
 /* Conteúdo recolhível: a altura vai de 250px até 0 suavemente. */
