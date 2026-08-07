@@ -340,21 +340,39 @@ h3 {
 .toggleDropzone {
     flex: 1;   /* ocupa tudo o que sobrar do grupo — cresce sozinho quando o Limpar encolhe */
     min-width: 32px;
-    font-size: 14px;
     display: flex;
     align-items: center;
     justify-content: flex-end;   /* ícone sempre ancorado na borda direita do botão... */
     padding-right: 9px;            /* ...a uma distância fixa dela, que nunca muda */
-    transition: background-color 0.2s ease,
-                transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.27);
+}
+
+/* REVISÃO (bug): o giro de 180° estava aplicado no BOTÃO inteiro
+   (".toggleDropzone"). Como esse botão cresce em largura quando o
+   Limpar encolhe, girar a caixa inteira — agora larga — fazia o giro
+   "varrer" visualmente até o pedaço onde o Limpar ficava, dando a
+   impressão de que os dois botões giravam juntos. A seta agora é um
+   elemento próprio, do tamanho do ícone, e só ELA gira — o botão por
+   trás dela permanece parado, só muda de largura. */
+.icone-toggle-dropzone {
+    display: inline-block;
+    font-size: 14px;
+    transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.27);
     transform: rotate(0deg);
 }
 
-/* Botão "LIMPAR": largura própria fixa + uma margem curta (só o
-   suficiente pro olho separar os dois botões, sem borda visível). */
+.area-dropzones.recolhido .icone-toggle-dropzone {
+    transform: rotate(-180deg);
+}
+
+/* Botão "LIMPAR": largura própria fixa + uma linha vertical fina e
+   discreta do lado direito, que é o que de fato torna os dois botões
+   visualmente distinguíveis mesmo sem o mouse em cima — antes havia
+   só uma margem, mas como os dois botões são transparentes (mostram a
+   cor da própria barra), uma margem sozinha ficava invisível. */
 .btn-limpar-dropzone {
     width: 68px;
-    margin-right: 8px;
+    margin-right: 4px;
+    border-right: 1px solid rgba(255, 255, 255, 0.3);
     font-size: 11px;
     letter-spacing: 0.5px;
     overflow: hidden;
@@ -363,16 +381,18 @@ h3 {
     transition: background-color 0.2s ease,
                 width 0.35s cubic-bezier(0.16, 1, 0.3, 1),
                 margin-right 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 0.35s cubic-bezier(0.16, 1, 0.3, 1),
                 opacity 0.25s ease;
 }
 
-/* Estado recolhido: o LIMPAR encolhe até "0" (largura e margem) — o
-   Recolher, sendo "flex:1" no grupo de largura fixa, cresce sozinho
-   para preencher exatamente o espaço que sobra, em tempo real,
-   acompanhando a mesma transição. */
+/* Estado recolhido: o LIMPAR encolhe até "0" (largura, margem e a
+   linha divisória) — o Recolher, sendo "flex:1" no grupo de largura
+   fixa, cresce sozinho para preencher exatamente o espaço que sobra,
+   em tempo real, acompanhando a mesma transição. */
 .area-dropzones.recolhido .btn-limpar-dropzone {
     width: 0;
     margin-right: 0;
+    border-right-color: transparent;
     opacity: 0;
     pointer-events: none;
 }
@@ -396,10 +416,6 @@ h3 {
     max-height: 0 !important;
     opacity: 0 !important;
     pointer-events: none;
-}
-
-.area-dropzones.recolhido .toggleDropzone {
-    transform: rotate(-180deg);
 }
 
 .area-dropzones.recolhido .barra-dropzone-header {
