@@ -1,0 +1,139 @@
+/* ============================================================
+   MÓDULO 4 — DROPZONES (áreas de arrastar/soltar PDF) E RECOLHER
+   O que este arquivo faz: estiliza as caixas de anexar PDF, a barra
+   que permite recolher/expandir esse bloco, e o estado "hover"
+   quando um arquivo é arrastado por cima.
+   ============================================================ */
+
+.area-dropzones {
+    margin-bottom: 20px;
+    transition: margin-bottom 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Barra clicável com o rótulo "ANEXAR PDF'S" e o botão de recolher.
+   Segue o mesmo padrão visual dos botões do sistema.
+
+   REVISÃO: a versão original usava "padding: 8px 481px" para
+   empurrar o texto e o botão para o centro da barra. Esse valor é
+   um número "mágico" calculado para a largura exata de 1100px do
+   container — em qualquer largura diferente ele quebra o alinhamento
+   ou estoura a barra. Trocado por "justify-content: center" + "gap",
+   que centraliza o mesmo par (rótulo + botão) de forma responsiva,
+   sem depender de uma largura fixa da tela. */
+.barra-dropzone-header {
+    display: flex;
+    justify-content: center;   /* antes: space-between + padding gigante */
+    align-items: center;
+    gap: 12px;                   /* espaço entre o rótulo e o botão de recolher */
+    background: #283618;
+    color: white;
+    padding: 8px 15px;          /* antes: 8px 481px (hack de centralização) */
+    border: none;
+    border-radius: 0;
+    margin-bottom: 10px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s ease, margin-bottom 0.35s ease;
+}
+
+.barra-dropzone-header:hover {
+    background: #1d2911;
+}
+
+.toggleDropzone {
+    height: 30px;
+    width: 32px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0px;
+    background: transparent;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.27);
+    transform: rotate(0deg);
+}
+
+/* Conteúdo recolhível: a altura vai de 250px até 0 suavemente. */
+.conteudo-dropzones {
+    max-height: 250px;
+    opacity: 1;
+    overflow: hidden;
+    transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.25s ease-in-out;
+}
+
+/* Remove a margem do último item interno para não duplicar espaçamento. */
+.conteudo-dropzones > div:last-child {
+    margin-bottom: 0 !important;
+}
+
+/* Estado "recolhido": zera a altura visível e desliga cliques dentro dele. */
+.area-dropzones.recolhido .conteudo-dropzones {
+    max-height: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none;
+}
+
+.area-dropzones.recolhido .toggleDropzone {
+    transform: rotate(-180deg);
+}
+
+.area-dropzones.recolhido .barra-dropzone-header {
+    margin-bottom: 0px;
+}
+
+/* ------------------------------------------------------------
+   REVISÃO: a folha original repetia a mesma lista de 6 a 8 IDs em
+   três regras diferentes (estilo base, estado ":hover" e o
+   "display:none" dos inputs de arquivo). Isso é frágil: toda nova
+   dropzone precisa lembrar de entrar manualmente nas três listas,
+   senão fica sem estilo. A classe ".dropZoneDoc" já existia no HTML
+   em 6 das 8 dropzones mas não tinha nenhuma regra CSS associada
+   (ou seja, estava "morta"). Agora ela é a única fonte de estilo:
+   toda dropzone recebe essa classe no HTML e este bloco cuida de
+   todas de uma vez.
+   ------------------------------------------------------------ */
+.dropZoneDoc {
+    border: 3px dashed #c7d59f;
+    padding: 10px;
+    text-align: center;
+    cursor: pointer;
+    margin-bottom: 20px;
+    font-size: 18px;
+    position: relative;
+}
+
+.dropZoneDoc.hover,
+.dropZoneDoc:hover,
+.dropZoneDoc:focus-visible {
+    background: #606c3870;
+}
+
+/* Anel de foco visível para quem navega só com o teclado (Tab / Enter),
+   já que agora as dropzones são focáveis — ver comentário no JS
+   (09-dropzones.js) sobre acessibilidade por teclado. */
+.dropZoneDoc:focus-visible {
+    outline: 3px solid #ffffff;
+    outline-offset: -3px;
+}
+
+/* Variante maior, usada apenas na dropzone da Comissão de Ética. */
+#dropZoneComissaoEtica {
+    padding: 70.5px;
+    font-size: 28px;
+}
+
+/* Todo input de arquivo do sistema é usado apenas como "gatilho"
+   escondido atrás de uma dropzone — por isso um único seletor por
+   atributo substitui a lista de 8 IDs que existia antes. */
+input[type="file"] {
+    display: none;
+}

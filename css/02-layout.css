@@ -1,0 +1,87 @@
+/* ============================================================
+   MÓDULO 2 — CONTAINER PRINCIPAL, MARCA D'ÁGUA E LAYOUT GERAL
+   O que este arquivo faz: centraliza o conteúdo de cada página,
+   desenha o brasão semitransparente de fundo e organiza o layout
+   de duas colunas (painel de dados + área principal) usado na
+   página LME.
+   ============================================================ */
+
+.container {
+    max-width: 1100px;     /* largura máxima do conteúdo, mesmo em telas grandes */
+    margin: auto;            /* centraliza horizontalmente */
+    margin-top: -50px;      /* ajuste fino para compensar o padding do body */
+    position: relative;      /* cria contexto de posicionamento para o brasão (::before) */
+    z-index: 2;               /* garante que o conteúdo fique acima da marca d'água */
+}
+
+/* Pseudo-elemento usado como "papel de parede" do brasão dentro do
+   container. Fica atrás de tudo (z-index -1) e não recebe cliques. */
+.container::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;   /* ocupa o container inteiro */
+
+    background-image: url("../Imagens Dentro do Lodout/Brasão.png");
+    background-repeat: no-repeat;
+    background-position: center -20px;
+    background-size: 620px;
+    opacity: 0.25;            /* efeito de marca d'água (bem apagado) */
+
+    pointer-events: none;    /* clique "atravessa" o brasão, não atrapalha os botões */
+    z-index: -1;
+}
+
+/* Layout principal da página LME: painel lateral esquerdo (dados
+   extraídos) + área principal (modelo de texto e resultado). */
+.conteudo-principal {
+    display: flex;
+    gap: 20px;                 /* espaço entre as duas colunas */
+    align-items: flex-start;   /* cada coluna cresce independente da altura da outra */
+}
+
+/* Coluna esquerda: painel fixo de largura definida com os cards
+   "Dados Extraídos". */
+.painel-extraidos {
+    width: 300px;
+    position: sticky;   /* acompanha a rolagem da página */
+}
+
+/* Coluna direita: ocupa todo o espaço restante. */
+.area-principal {
+    flex: 1;
+}
+
+.bloco {
+    margin-top: 0px;
+}
+
+/* ============================================================
+   IMAGENS DECORATIVAS DOS PAINÉIS (fundo dos cards e da página DOC)
+   ============================================================ */
+
+.imagemPainel {
+    width: 222px;
+    height: 222px;
+    margin-top: -15px;
+    margin-left: 40px;
+    margin-right: auto;
+    background-image: url("../Imagens Dentro do Lodout/QmSaude.jpg");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    opacity: 0.85;
+    pointer-events: none;   /* decorativo: não deve interceptar cliques */
+}
+
+.imagemPainelDoc {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image: url("../Imagens Dentro do Lodout/CFC25.png");
+    background-repeat: no-repeat;
+    background-position: center 535px;   /* posição calibrada manualmente, não alterar */
+    background-size: 600px;
+    opacity: 0.65;
+    pointer-events: none;
+    z-index: 1;   /* acima do fundo verde, porém abaixo dos botões da página */
+}

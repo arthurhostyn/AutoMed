@@ -1,0 +1,74 @@
+/* ============================================================
+   MÓDULO 7 — SISTEMA DE ABAS/PÁGINAS E TRANSIÇÕES ENTRE ELAS
+   O que este arquivo faz: controla qual "página" (LME, DOC, EXCEL,
+   BANCO) fica visível e a animação de deslizar ao trocar de aba.
+   ============================================================ */
+
+.pagina {
+    display: none;         /* toda página começa escondida... */
+    position: relative;    /* ...e prende elementos absolutos (ex.: brasão da DOC) dentro dela */
+}
+
+.pagina.ativa {
+    display: block;        /* ...até o JS marcar a página atual como ativa */
+}
+
+#pagina-doc {
+    position: relative;
+    min-height: 1100px !important;      /* expande a página para mostrar o brasão inteiro */
+    padding-bottom: 460px !important;   /* garante espaço para a base do brasão */
+}
+
+/* Na página DOC o painel de cards precisa ocupar a largura toda
+   (sem isso os cards ficam espremidos/cortados, pois herdariam a
+   largura fixa de 300px usada na página LME). */
+#pagina-doc .painel-extraidos {
+    width: 100% !important;
+    position: static !important;
+}
+
+.painelAbas {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    margin-bottom: 10px;
+}
+
+.oculto {
+    display: none !important;
+}
+
+/* Some suavemente ao trocar entre os modos "LME SCAN" e "COMISSÃO
+   DE ÉTICA" dentro da página DOC. */
+#blocoLmeScan:not(.oculto),
+#blocoComissaoEtica:not(.oculto),
+#painelExtraidosLmeScan:not(.oculto),
+#painelExtraidosComissao:not(.oculto),
+#inputPesquisaDoc:not(.oculto) {
+    animation: surgirDocSuave 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes surgirDocSuave {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Anima a página que entra: da direita quando avança, da esquerda
+   quando volta (classes aplicadas dinamicamente pelo JS de navegação). */
+.pagina.slide-direita {
+    animation: slideDaDireita 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.pagina.slide-esquerda {
+    animation: slideDaEsquerda 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideDaDireita {
+    from { opacity: 0; transform: translateX(45px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideDaEsquerda {
+    from { opacity: 0; transform: translateX(-45px); }
+    to   { opacity: 1; transform: translateX(0); }
+}

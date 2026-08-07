@@ -1,0 +1,47 @@
+/* ============================================================
+   MÓDULO 5 — CARDS DE DADOS EXTRAÍDOS
+   O que este arquivo faz: estiliza os pequenos cartões que mostram
+   os dados lidos do PDF (Paciente, Médico, Data, etc.).
+   ============================================================ */
+
+.dados-extraidos {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.item-dado {
+    background: #f5f5f5;
+    color: black;
+    border: 2px solid #2f3e1d;
+    border-radius: 6px;
+    padding: 12px;
+}
+
+.titulo {
+    font-weight: bold;
+    font-size: 12px;
+    color: #283618;
+}
+
+.valor {
+    font-size: 14px;
+    margin-top: 3px;
+}
+
+.painel-extraidospag1 {
+    margin-top: 20px;
+}
+
+/* Variante em linha, usada na página "Renomeador de Documentos". */
+.dados-extraidos-horizontal {
+    display: flex;
+    flex-direction: row !important;
+    gap: 10px;
+    width: 100%;
+}
+
+.dados-extraidos-horizontal .item-dado {
+    flex: 1;
+    min-width: 244px;
+}

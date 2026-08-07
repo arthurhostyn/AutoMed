@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador DIEx de LME</title>
+
+    <link rel="icon" type="image/png" href="imagem do AutoMed.ico">
+
+    <!-- ============================================================
+         FOLHA DE ESTILOS DIVIDIDA EM MÓDULOS (ver pasta /css)
+         A ordem dos <link> abaixo é a mesma ordem em que as regras
+         apareciam no antigo "style.css" — importante para manter o
+         resultado visual idêntico quando duas regras têm a mesma
+         especificidade CSS.
+         ============================================================ -->
+    <link rel="stylesheet" href="css/01-base.css">
+    <link rel="stylesheet" href="css/02-layout.css">
+    <link rel="stylesheet" href="css/03-cabecalho.css">
+    <link rel="stylesheet" href="css/04-dropzones.css">
+    <link rel="stylesheet" href="css/05-cards-dados.css">
+    <link rel="stylesheet" href="css/06-formularios.css">
+    <link rel="stylesheet" href="css/07-abas-paginas.css">
+    <link rel="stylesheet" href="css/08-rodape.css">
+    <link rel="stylesheet" href="css/09-banco-dados.css">
+    <link rel="stylesheet" href="css/10-toasts.css">
+    <link rel="stylesheet" href="css/11-modais.css">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+
+<body id="app">
+
+<!-- ============================================================
+     PÁGINA "LME" (GERADOR DE DIEx DE LME)
+     ============================================================ -->
+<div class="pagina ativa" id="pagina-lme">
+
+        <div class="container">
+
+            <h1>GERADOR DIEX DE LME</h1>
+
+            <!-- BARRA DE CONTROLE DO BANCO (TOPO) -->
+            <div class="barra-banco-superior">
+                <button id="btnExcluirBanco" class="btn-banco-topo">EXCLUIR</button>
+
+                <div class="grupo-select-central">
+                    <input type="text" id="inputPesquisaBanco" class="select-banco-topo" placeholder="Pesquisar Paciente..." list="listaPacientesBanco" autocomplete="off">
+                    <datalist id="listaPacientesBanco"></datalist>
+                </div>
+
+                <button id="btnInserirBanco" class="btn-banco-topo">SALVAR</button>
+            </div>
+
+            <!-- CONJUNTO DE DROPZONES DE LME -->
+            <div class="area-dropzones" id="areaDropzoneLme">
+                <div class="barra-dropzone-header" id="headerDropzoneLme">
+                    <span class="label-dropzone">ANEXAR PDF'S</span>
+                    <button type="button" id="toggleDropzoneLme" class="toggleDropzone" title="Recolher / Expandir Dropzones" aria-label="Recolher ou expandir área de anexos">▼</button>
+                </div>
+                <div class="conteudo-dropzones">
+                    <!-- Dropzone 1: PDF de Agendamento -->
+                    <div id="dropZone" class="dropZoneDoc">
+                        <div class="textoDrop">Clique ou Arraste o PDF de Agendamento</div>
+                        <div id="nomeArquivoAgendamento" class="nomeArquivo"></div>
+                        <input type="file" id="pdfFile" accept=".pdf">
+                    </div>
+
+                    <!-- Dropzone 2: PDF do DIEx de Solicitação -->
+                    <div id="dropZoneSolicitacao" class="dropZoneDoc">
+                        <div class="textoDrop">Clique ou Arraste o PDF do DIEx de Solicitação</div>
+                        <div id="nomeArquivoSolicitacao" class="nomeArquivo"></div>
+                        <input type="file" id="pdfSolicitacao" accept=".pdf">
+                    </div>
+                </div>
+            </div>
+
+            <div class="conteudo-principal">
+
+                <!-- Painel lateral esquerdo: Dados Extraídos -->
+                <aside class="painel-extraidos">
+                    <h2>Dados Extraídos</h2>
+
+                    <div class="dados-extraidos">
+                        <div class="item-dado">
+                            <div class="titulo">Paciente</div>
+                            <div id="dbgPaciente" class="valor">-</div>
+                        </div>
+
+                        <div class="item-dado">
+                            <div class="titulo">Médico</div>
+                            <div id="dbgMedico" class="valor">-</div>
+                        </div>
+
+                        <div class="item-dado">
+                            <div class="titulo">Especialidade</div>
+                            <div id="dbgEspecialidade" class="valor">-</div>
+                        </div>
+
+                        <div class="item-dado">
+                            <div class="titulo">Data / Hora</div>
+                            <div id="dbgDataHora" class="valor">-</div>
+                        </div>
+
+                        <div class="item-dado">
+                            <div class="titulo">Local</div>
+                            <div id="dbgLocal" class="valor">-</div>
+                        </div>
+
+                        <div class="item-dado">
+                            <div class="titulo">OM Solicitante</div>
+                            <div id="dbgOM" class="valor">-</div>
+                        </div>
+
+                        <div class="item-dado">
+                            <div class="titulo">OM Abreviada</div>
+                            <div id="dbgOMAbr" class="valor">-</div>
+                        </div>
+
+                        <div class="item-dado">
+                            <div class="titulo">Tipo OM</div>
+                            <div id="dbgTipoOM" class="valor">-</div>
+                        </div>
+                    </div>
+
+                    <div class="imagemPainel"></div>
+                </aside>
+
+                <!-- Área principal: Escolha do modelo + Banco de Dados + Geração -->
+                <main class="area-principal">
+
+                    <div class="bloco">
+                        <select id="modeloSelect" style="flex: 1;">
+                            <option value="agendamento">DIEx DE AGENDAMENTO</option>
+                            <option value="s2">DIEx DE ENVIO PARA S2</option>
+                            <option value="remessa">DIEx DE REMESSA PARA OM</option>
+                        </select>
+
+                        <h2>Modelo de Texto</h2>
+
+                        <div id="modelo_agendamento" class="modeloTexto area-editable" contenteditable="true">1. Informo a {PRONOME} {TIPO_OM}, em resposta ao documento de referência, o agendamento de consulta para confecção de Laudo Médico Especializado para {PRONOMEPACIENTE} {PACIENTE}, conforme descrito abaixo:
+
+- <b>Médico:</b> {MEDICO};
+
+- <b>Especialidade:</b> {ESPECIALIDADE};
+
+- <b>Data:</b> {DATA} - {DIASEMANA};
+
+- <b>Horário:</b> {HORARIO}h;
+
+- <b>Local:</b> {LOCAL}.</div>
+
+                        <!-- MODELOS COM VARIÁVEIS INTERNAS (spans) -->
+                        <div id="modelo_s2" class="modeloTexto area-editable" contenteditable="true">1. Por ordem da Cel SIMONE ABREU, solicito a remessa de <span class="var-tipo-doc">conferência médica</span> d{PRONOMEPACIENTE} {PACIENTE} – {OMABR}, realizado no dia {DATA_MILITAR}<span class="var-sufixo-medico"></span>.
+
+2. O documento deverá ser enviado, pelo sistema da 2ª Seção, para o {CARGO_OM} do {OM}.
+
+3. Remeto, em anexo, os referidos laudos escaneados.</div>
+
+                        <div id="modelo_remessa" class="modeloTexto area-editable" contenteditable="true">1. Informo a {PRONOME} {TIPO_OM} que {PRONOMEPACIENTE} paciente {PACIENTE} realizou consulta para confecção de <span class="var-tipo-doc">conferência médica</span>, no dia {DATA_MILITAR}<span class="var-sufixo-medico"></span>.</div>
+
+                    <button id="gerarBtn">GERAR DIEx</button>
+
+                    <select id="pronomePaciente">
+                        <option value="o">MASCULINO (O)</option>
+                        <option value="a">FEMININO (A)</option>
+                    </select>
+
+
+                        <!-- SELECT COM A CLASSE DE TRANSIÇÃO -->
+                        <select id="tipoLaudoConferenciaSelect" class="oculto-select">
+                            <option value="conferencia">CONFERÊNCIA</option>
+                            <option value="laudo">LAUDO</option>
+                        </select>
+
+                    <div class="bloco">
+                        <h2>Resultado</h2>
+                        <div id="resultado" class="area-editable" contenteditable="true"></div>
+                        <button id="copiarBtn">COPIAR TEXTO</button>
+                    </div>
+
+                </main>
+
+            </div>
+
+        </div>
+
+</div>
+
+<!-- ============================================================
+     PÁGINA "EXCEL" (GERADOR DE LINHA EXCEL)
+     ============================================================ -->
+<div class="pagina" id="pagina-excel">
+    <div class="container">
+        <h1>GERADOR DE LINHA EXCEL</h1>
+
+        <div class="barra-banco-superior">
+            <div class="grupo-select-central">
+                <input type="text" id="inputPesquisaExcel" class="select-banco-topo" placeholder="Pesquisar Paciente..." list="listaPacientesBanco" autocomplete="off">
+            </div>
+        </div>
+
+        <div class="area-dropzones" id="areaDropzoneExcel">
+            <div class="barra-dropzone-header" id="headerDropzoneExcel">
+                <span class="label-dropzone">ANEXAR PDF'S</span>
+                <button type="button" id="toggleDropzoneExcel" class="toggleDropzone" title="Recolher / Expandir Dropzones" aria-label="Recolher ou expandir área de anexos">▼</button>
+            </div>
+            <div class="conteudo-dropzones">
+                <div id="dropZoneExcelAgendamento" class="dropZoneDoc">
+                    <div class="textoDrop">Clique ou Arraste o PDF de Agendamento</div>
+                    <div id="nomeArquivoExcelAgendamento" class="nomeArquivo"></div>
+                    <input type="file" id="pdfExcelAgendamento" accept=".pdf">
+                </div>
+
+                <div id="dropZoneExcelSolicitacao" class="dropZoneDoc">
+                    <div class="textoDrop">Clique ou Arraste o PDF do DIEx de Solicitação</div>
+                    <div id="nomeArquivoExcelSolicitacao" class="nomeArquivo"></div>
+                    <input type="file" id="pdfExcelSolicitacao" accept=".pdf">
+                </div>
+            </div>
+        </div>
+
+        <input type="text" id="resultadoExcel" placeholder="A linha formatada para o Excel aparecerá aqui automaticamente...">
+
+        <div class="botoesDoc">
+            <button id="copiarExcelBtn" style="width: 100%;">COPIAR PARA EXCEL</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- ============================================================
+     PÁGINA "DOC" (RENOMEADOR DE DOCUMENTOS)
+     ============================================================ -->
+<div class="pagina" id="pagina-doc">
+    <div class="container">
+        <h3>RENOMEADOR DE DOCUMENTOS</h3>
+
+        <div class="botoesDoc">
+            <select id="tipodocumento">
+                <option value="o">LME SCAN</option>
+                <option value="a">COMISSÃO DE ÉTICA</option>
+            </select>
+
+            <input type="text" id="inputPesquisaDoc" class="select-banco-topo" placeholder="Pesquisar Paciente..." list="listaPacientesBanco" autocomplete="off">
+        </div>
+
+        <div id="blocoLmeScan">
+            <div class="area-dropzones" id="areaDropzoneDoc">
+                <div class="barra-dropzone-header" id="headerDropzoneDoc">
+                    <span class="label-dropzone">ANEXAR PDF'S</span>
+                    <button type="button" id="toggleDropzoneDoc" class="toggleDropzone" title="Recolher / Expandir Dropzones" aria-label="Recolher ou expandir área de anexos">▼</button>
+                </div>
+                <div class="conteudo-dropzones">
+                    <div id="dropZoneDocConsulta" class="dropZoneDoc">
+                        <div class="textoDrop">Clique ou Arraste o PDF de Marcação</div>
+                        <div id="nomeArquivoConsultaDoc" class="nomeArquivo"></div>
+                        <input type="file" id="pdfConsultaDoc" accept=".pdf">
+                    </div>
+
+                    <div id="dropZoneDocSolicitacao" class="dropZoneDoc">
+                        <div class="textoDrop">Clique ou Arraste o PDF de Solicitação</div>
+                        <div id="nomeArquivoSolicitacaoDoc" class="nomeArquivo"></div>
+                        <input type="file" id="pdfSolicitacaoDoc" accept=".pdf">
+                    </div>
+                </div>
+            </div>
+
+            <div id="dropZoneDocArquivo" class="dropZoneDoc">
+                <div class="textoDrop">Clique ou Arraste o PDF a ser Renomeado</div>
+                <div id="nomeArquivoRenomear" class="nomeArquivo"></div>
+                <input type="file" id="pdfRenomear" accept=".pdf">
+            </div>
+        </div>
+
+        <div id="blocoComissaoEtica" class="oculto">
+            <div id="dropZoneComissaoEtica" class="dropZoneDoc">
+                <div class="textoDrop">Clique ou Arraste o Scan da Comissão de Ética</div>
+                <div id="nomeArquivoComissaoEtica" class="nomeArquivo"></div>
+                <input type="file" id="pdfComissaoEtica" accept=".pdf">
+            </div>
+        </div>
+
+        <input type="text" id="nomeArquivoGerado">
+
+        <aside class="painel-extraidos">
+            <h2>Dados Extraídos</h2>
+
+            <div id="painelExtraidosLmeScan" class="dados-extraidos-horizontal">
+                <div class="item-dado">
+                    <div class="titulo">Paciente</div>
+                    <div id="dbgPacienteDoc" class="valor">-</div>
+                </div>
+                <div class="item-dado">
+                    <div class="titulo">OM</div>
+                    <div id="dbgOMAbrDoc" class="valor">-</div>
+                </div>
+                <div class="item-dado">
+                    <div class="titulo">Data</div>
+                    <div id="dbgDataDoc" class="valor">-</div>
+                </div>
+                <div class="item-dado">
+                    <div class="titulo">Especialidade</div>
+                    <div id="dbgEspecialidadeDoc" class="valor">-</div>
+                </div>
+            </div>
+
+            <div id="painelExtraidosComissao" class="dados-extraidos-horizontal oculto">
+                <div class="item-dado">
+                    <div class="titulo">Sessão</div>
+                    <div id="dbgSessaoComissao" class="valor">-</div>
+                </div>
+                <div class="item-dado">
+                    <div class="titulo">Paciente</div>
+                    <div id="dbgPacienteComissao" class="valor">-</div>
+                </div>
+                <div class="item-dado">
+                    <div class="titulo">Data</div>
+                    <div id="dbgDataComissao" class="valor">-</div>
+                </div>
+            </div>
+        </aside>
+
+        <div class="botoesDoc">
+            <button id="gerarNomeBtn">GERAR NOME</button>
+            <button id="renomearBtn">BAIXAR PDF</button>
+        </div>
+    </div>
+
+    <div class="imagemPainelDoc"></div>
+</div>
+
+
+<!-- ============================================================
+     PÁGINA "BANCO"
+     ============================================================ -->
+<div class="pagina" id="pagina-banco">
+    <div class="container">
+        <h1>GERENCIADOR DO BANCO DE DADOS</h1>
+
+        <div class="cartao-conexao">
+            <p>Selecione a pasta no seu computador onde os dados dos pacientes serão armazenados.</p>
+            <div id="statusBanco" class="status-banco-grande">DESCONECTADO</div>
+            <button id="btnConectarBanco" class="btn-conectar-central">CONECTAR PASTA DO BANCO</button>
+        </div>
+
+        <div class="info-banco">
+            <p><strong>Atenção:</strong> O navegador solicita permissão toda vez que o sistema é recarregado por questões de segurança.</p>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     RODAPÉ FIXO
+     ============================================================ -->
+<footer id="footerSistema">
+    <div class="rodapeEsquerda">
+        <div class="info-versao">
+            <div class="versao">Versão 1.4.4</div>
+            <div class="versaodata">Última Atualização 04/08/2026</div>
+        </div>
+    </div>
+
+    <div class="rodapeCentro">
+        <button id="toggleAbas" class="toggleAbas" aria-label="Recolher ou expandir menu de páginas">▼</button>
+        <div id="conteudoAbas">
+            <button class="aba ativa" data-aba="lme">LME</button>
+            <button class="aba" data-aba="doc">DOC</button>
+            <button class="aba" data-aba="excel">EXCEL</button>
+            <button class="aba" data-aba="banco">BANCO</button>
+        </div>
+    </div>
+
+    <div class="rodapeDireita">
+        <div class="assinatura">
+            <div class="autor">Developed by: CB HOSTYN</div>
+            <div class="frase">"O fogo que corrói os mais fracos, é o mesmo que forja os mais fortes"</div>
+            <div class="turma">CFC 25</div>
+        </div>
+    </div>
+</footer>
+
+<!-- ============================================================
+     MODAIS PADRONIZADOS DO SISTEMA (DUPLICIDADE E EXCLUSÃO)
+     ============================================================ -->
+<div id="modalDuplicidade" class="modal-overlay oculto">
+    <div class="modal-container">
+        <div class="modal-cabecalho">
+            PACIENTE JÁ CADASTRADO NO BANCO DE DADOS
+        </div>
+
+        <p class="modal-mensagem">Já existe um registro salvo com este mesmo nome. Compare os dados antes de prosseguir:</p>
+
+        <div class="modal-comparacao">
+            <div class="card-comparacao">
+                <div class="titulo-card-modal">DADOS EXISTENTES NO BANCO</div>
+                <div class="campo-comparativo"><span>Paciente:</span> <strong id="compExistentePaciente">-</strong></div>
+                <div class="campo-comparativo"><span>OM:</span> <strong id="compExistenteOM">-</strong></div>
+                <div class="campo-comparativo"><span>Data:</span> <strong id="compExistenteData">-</strong></div>
+                <div class="campo-comparativo"><span>Especialidade:</span> <strong id="compExistenteEspecialidade">-</strong></div>
+                <div class="campo-comparativo"><span>Médico:</span> <strong id="compExistenteMedico">-</strong></div>
+            </div>
+
+            <div class="card-comparacao">
+                <div class="titulo-card-modal">NOVOS DADOS A SEREM SALVOS</div>
+                <div class="campo-comparativo"><span>Paciente:</span> <strong id="compNovoPaciente">-</strong></div>
+                <div class="campo-comparativo"><span>OM:</span> <strong id="compNovoOM">-</strong></div>
+                <div class="campo-comparativo"><span>Data:</span> <strong id="compNovoData">-</strong></div>
+                <div class="campo-comparativo"><span>Especialidade:</span> <strong id="compNovoEspecialidade">-</strong></div>
+                <div class="campo-comparativo"><span>Médico:</span> <strong id="compNovoMedico">-</strong></div>
+            </div>
+        </div>
+
+        <div class="modal-rodape">
+            <button type="button" id="btnModalSubstituir" class="btn-modal">SUBSTITUIR (SOBRESCREVER)</button>
+            <button type="button" id="btnModalSalvarAmbos" class="btn-modal">SALVAR AMBOS</button>
+            <button type="button" id="btnModalCancelar" class="btn-modal">CANCELAR / VOLTAR</button>
+        </div>
+    </div>
+</div>
+
+<div id="modalExcluir" class="modal-overlay oculto">
+    <div class="modal-container modal-container-pequeno">
+        <div class="modal-cabecalho">
+            CONFIRMAR EXCLUSÃO DE REGISTRO
+        </div>
+
+        <p class="modal-mensagem">Tem certeza que deseja EXCLUIR PERMANENTEMENTE o registro abaixo do banco local?</p>
+
+        <div class="card-comparacao">
+            <div class="campo-comparativo"><span>Paciente:</span> <strong id="excluirNomePaciente">-</strong></div>
+            <div class="campo-comparativo"><span>OM:</span> <strong id="excluirOMPaciente">-</strong></div>
+            <div class="campo-comparativo"><span>Data:</span> <strong id="excluirDataPaciente">-</strong></div>
+        </div>
+
+        <div class="modal-rodape">
+            <button type="button" id="btnModalConfirmarExclusao" class="btn-modal">SIM, EXCLUIR REGISTRO</button>
+            <button type="button" id="btnModalCancelarExclusao" class="btn-modal">CANCELAR / VOLTAR</button>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     LÓGICA DO SISTEMA, DIVIDIDA EM MÓDULOS (ver pasta /js)
+     Carregados como <script> comuns (sem type="module") de propósito:
+     assim o sistema continua funcionando ao abrir o arquivo HTML
+     diretamente do disco (duplo clique), sem precisar de um servidor
+     local — módulos ES (type="module") são bloqueados pelo navegador
+     nesse cenário. Por isso a ORDEM dos scripts abaixo importa: cada
+     arquivo pode depender de funções/variáveis definidas nos
+     anteriores.
+     ============================================================ -->
+<script src="js/01-toast.js"></script>
+<script src="js/02-estado.js"></script>
+<script src="js/03-referencias-dom.js"></script>
+<script src="js/04-base-conhecimento.js"></script>
+<script src="js/05-utils-texto.js"></script>
+<script src="js/06-formatadores.js"></script>
+<script src="js/07-extratores-pdf.js"></script>
+<script src="js/08-leitor-pdf.js"></script>
+<script src="js/09-dropzones.js"></script>
+<script src="js/10-paineis-extraidos.js"></script>
+<script src="js/11-gerador-diex.js"></script>
+<script src="js/12-renomeador-documentos.js"></script>
+<script src="js/13-navegacao-abas.js"></script>
+<script src="js/14-banco-dados.js"></script>
+<script src="js/15-excel.js"></script>
+<script src="js/16-inicializacao.js"></script>
+
+</body>
+</html>
