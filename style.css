@@ -242,21 +242,21 @@ h3 {
     transition: margin-bottom 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Barra clicável com o rótulo "ANEXAR PDF'S" e o botão de recolher.
-   Segue o mesmo padrão visual dos botões do sistema.
+/* Barra clicável com o rótulo "ANEXAR PDF'S" e os botões de ação
+   (Recolher/Expandir e Limpar).
 
    REVISÃO: a versão original usava "padding: 8px 481px" para
    empurrar o texto e o botão para o centro da barra. Esse valor é
    um número "mágico" calculado para a largura exata de 1100px do
    container — em qualquer largura diferente ele quebra o alinhamento
-   ou estoura a barra. Trocado por "justify-content: center" + "gap",
-   que centraliza o mesmo par (rótulo + botão) de forma responsiva,
-   sem depender de uma largura fixa da tela. */
+   ou estoura a barra. Trocado por posicionamento independente: o
+   rótulo fica centralizado por conta própria (como o campo de busca
+   central em ".grupo-select-central", no MÓDULO 9) e o grupo de
+   botões fica ancorado na borda direita — nenhum dos dois depende de
+   medir a largura da tela. */
 .barra-dropzone-header {
     display: flex;
-    justify-content: center;   /* antes: space-between + padding gigante */
     align-items: center;
-    gap: 12px;                   /* espaço entre o rótulo e o botão de recolher */
     background: #283618;
     color: white;
     padding: 8px 15px;          /* antes: 8px 481px (hack de centralização) */
@@ -267,7 +267,7 @@ h3 {
     font-weight: bold;
     cursor: pointer;
     user-select: none;
-    position: relative;   /* ponto de referência para o botão "LIMPAR" (ver abaixo) */
+    position: relative;   /* ponto de referência para o rótulo centralizado, abaixo */
     transition: background-color 0.2s ease, margin-bottom 0.35s ease;
 }
 
@@ -275,90 +275,106 @@ h3 {
     background: #1d2911;
 }
 
-.toggleDropzone {
+/* Rótulo "ANEXAR PDF'S": sempre no centro da barra, independente da
+   largura do grupo de botões à direita (ver .grupo-acoes-dropzone). */
+.label-dropzone {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;   /* decorativo — quem recebe o clique é a própria barra */
+}
+
+/* ------------------------------------------------------------
+   GRUPO DE BOTÕES DA BARRA (Limpar + Recolher/Expandir)
+
+   Fica ancorado na borda direita da barra ("margin-left:auto" dentro
+   do flex da barra), no MESMO recuo de 15px que o botão SALVAR já usa
+   na barra do banco logo acima.
+
+   Tem uma LARGURA TOTAL FIXA (equivalente à soma dos dois botões
+   quando ambos aparecem). Isso é o que permite o botão de recolher
+   "incorporar" o espaço do Limpar: dentro dessa largura fixa, o
+   Limpar encolhe (".btn-limpar-dropzone" no estado recolhido) e o
+   Recolher tem "flex:1", ocupando sozinho tudo o que sobra — sem
+   deixar vazio e sem que o grupo inteiro mude de tamanho ou de
+   posição.
+   ------------------------------------------------------------ */
+.grupo-acoes-dropzone {
+    display: flex;
+    align-items: stretch;
+    width: 108px;      /* soma do LIMPAR + margem + botão de recolher */
     height: 30px;
-    width: 32px;
+    margin-left: auto;
+    position: relative;
+    z-index: 1;   /* fica acima do rótulo centralizado, caso as duas áreas se toquem */
+}
+
+/* Botões da barra: mesmo padrão visual do resto do sistema — fundo
+   transparente (mostra a cor da própria barra), sem borda, escurece
+   no hover. É o padrão que ".toggleDropzone" já usava; agora os dois
+   botões compartilham exatamente o mesmo visual. */
+.toggleDropzone,
+.btn-limpar-dropzone {
     margin: 0;
     padding: 0;
     border: none;
-    border-radius: 0px;
+    border-radius: 0;
     background: transparent;
     color: white;
     font-weight: bold;
     cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.toggleDropzone:hover,
+.btn-limpar-dropzone:hover {
+    background: #1d2911;
+}
+
+.toggleDropzone:focus-visible,
+.btn-limpar-dropzone:focus-visible {
+    outline: 2px solid #ffffff;
+    outline-offset: -2px;
+}
+
+.toggleDropzone {
+    flex: 1;   /* ocupa tudo o que sobrar do grupo — cresce sozinho quando o Limpar encolhe */
+    min-width: 32px;
     font-size: 14px;
     display: flex;
     align-items: center;
-    justify-content: center;
-    transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.27);
+    justify-content: flex-end;   /* ícone sempre ancorado na borda direita do botão... */
+    padding-right: 9px;            /* ...a uma distância fixa dela, que nunca muda */
+    transition: background-color 0.2s ease,
+                transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.27);
     transform: rotate(0deg);
 }
 
-/* ------------------------------------------------------------
-   FUNCIONALIDADE NOVA — BOTÃO "LIMPAR" DA BARRA "ANEXAR PDF'S"
-
-   Posição: fica encostado na borda direita da barra, no MESMO recuo
-   (15px, igual ao "padding" da própria barra) que o botão "SALVAR" já
-   usa na barra do banco logo acima — por isso é posicionado com
-   "position:absolute; right:15px" em vez de entrar no grupo
-   centralizado do rótulo + botão de recolher. Visualmente ele fica à
-   direita do botão de recolher/expandir, não mais entre ele e o
-   rótulo.
-
-   Visual: ganha borda e "hover" próprios para se diferenciar
-   claramente do botão de recolher (que é só um ícone sem borda) —
-   antes os dois eram visualmente parecidos demais.
-
-   Transição: ao recolher a dropzone, em vez de sumir bruscamente
-   (display:none), ele esmaece e encolhe suavemente — mesma técnica
-   (opacity + transform + visibility) já usada no botão do rodapé
-   (#toggleAbas) e no select "Conferência/Laudo" (#tipoLaudoConferenciaSelect).
-   ------------------------------------------------------------ */
+/* Botão "LIMPAR": largura própria fixa + uma margem curta (só o
+   suficiente pro olho separar os dois botões, sem borda visível). */
 .btn-limpar-dropzone {
-    position: absolute;
-    right: 15px;
-    top: 50%;
-
-    height: 26px;
-    margin: 0;
-    padding: 0 12px;
-    border: 1px solid #c7d59f;      /* borda própria: diferencia do botão de recolher */
-    border-radius: 2px;
-    background: transparent;
-    color: #c7d59f;
-    font-weight: bold;
-    cursor: pointer;
+    width: 68px;
+    margin-right: 8px;
     font-size: 11px;
     letter-spacing: 0.5px;
-
+    overflow: hidden;
+    white-space: nowrap;
     opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
-    transform: translateY(-50%) scale(1);
-    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease,
-                opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1),
-                transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
-                visibility 0.35s;
+    transition: background-color 0.2s ease,
+                width 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                margin-right 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 0.25s ease;
 }
 
-.btn-limpar-dropzone:hover {
-    background: #c7d59f;
-    color: #283618;
-    border-color: #c7d59f;
-}
-
-.btn-limpar-dropzone:focus-visible {
-    outline: 2px solid #ffffff;
-    outline-offset: 2px;
-}
-
-/* Estado recolhido: esmaece e encolhe suavemente, em vez de sumir de
-   uma vez — e para de capturar clique/toque enquanto está assim. */
+/* Estado recolhido: o LIMPAR encolhe até "0" (largura e margem) — o
+   Recolher, sendo "flex:1" no grupo de largura fixa, cresce sozinho
+   para preencher exatamente o espaço que sobra, em tempo real,
+   acompanhando a mesma transição. */
 .area-dropzones.recolhido .btn-limpar-dropzone {
+    width: 0;
+    margin-right: 0;
     opacity: 0;
-    visibility: hidden;
     pointer-events: none;
-    transform: translateY(-50%) scale(0.85);
 }
 
 /* Conteúdo recolhível: a altura vai de 250px até 0 suavemente. */
