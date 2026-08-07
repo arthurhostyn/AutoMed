@@ -19,11 +19,10 @@
    15. Pesquisa e cópia automática (página EXCEL)
    16. Revelação suave da página (anti-flicker)
    17. Atalhos de teclado
-   18. Impressão do resultado gerado
-   19. Nova consulta (limpar campos da página LME)
-   20. Estatísticas do banco de dados
-   21. Backup do banco de dados (exportar / importar)
-   22. Rascunho automático do resultado gerado
+   18. Nova consulta (botão "LIMPAR" das dropzones, todas as páginas)
+   19. Estatísticas do banco de dados
+   20. Backup do banco de dados (exportar / importar)
+   21. Rascunho automático do resultado gerado
 
    Este arquivo é carregado como um <script> comum (sem
    type="module") de propósito: assim o sistema continua
@@ -1738,7 +1737,7 @@ async function atualizarListaPacientesBanco() {
     }
 
     // FUNCIONALIDADE NOVA: recalcula o resumo estatístico sempre que a
-    // lista de pacientes é recarregada (ver MÓDULO 20, mais abaixo).
+    // lista de pacientes é recarregada (ver MÓDULO 19, mais abaixo).
     atualizarEstatisticasBanco();
 }
 
@@ -1836,7 +1835,7 @@ function fecharModalExcluir() {
  * o "dados.json" e os PDFs originais anexados nesta sessão.
  * @param {string} sufixoPasta - texto extra no nome da pasta, usado para não colidir ao "Salvar Ambos".
  * @param {{avisar?: boolean, atualizarLista?: boolean}} opcoes - permite
- *        salvar em lote (ver MÓDULO 21 — importar backup) sem disparar um
+ *        salvar em lote (ver MÓDULO 20 — importar backup) sem disparar um
  *        toast e sem revarrer a pasta inteira a cada item importado.
  */
 async function executarSalvamentoBanco(dados, sufixoPasta = "", opcoes = {}) {
@@ -2087,28 +2086,19 @@ document.addEventListener("keydown", (e) => {
 
 
 /* ============================================================
-   MÓDULO 18 — IMPRESSÃO DO RESULTADO GERADO (PÁGINA LME)
-   O que este bloco faz: manda o navegador imprimir a página, mas o
-   CSS de impressão (MÓDULO 12 do style.css) garante que só o texto
-   do DIEx gerado apareça no papel — nada de brasão, rodapé ou toasts.
-   ============================================================ */
+   MÓDULO 18 — NOVA CONSULTA (BOTÃO "LIMPAR" DAS DROPZONES)
+   O que este bloco faz: cada barra "ANEXAR PDF'S" (LME, EXCEL e DOC)
+   tem um botão "LIMPAR" ao lado do botão de recolher/expandir — zera
+   os PDFs anexados e os campos daquela página, sem precisar
+   recarregar tudo, para começar do zero rapidamente.
 
-document.getElementById("imprimirBtn")?.addEventListener("click", () => {
-    const elementoResultado = document.getElementById("resultado");
-    if (!elementoResultado || !elementoResultado.innerText.trim()) {
-        mostrarToast("Gere o texto antes de imprimir.", "aviso");
-        return;
-    }
-    window.print();
-});
-
-
-/* ============================================================
-   MÓDULO 19 — NOVA CONSULTA (LIMPAR CAMPOS DA PÁGINA LME)
-   O que este bloco faz: zera os PDFs anexados, o paciente carregado
-   do banco e os cards de "Dados Extraídos" da página LME — sem
-   precisar recarregar a página inteira — para começar uma consulta
-   do zero rapidamente.
+   REVISÃO: o botão "LIMPAR" só aparece com a dropzone aberta — a
+   regra ".area-dropzones.recolhido .btn-limpar-dropzone" (MÓDULO 4 do
+   style.css) o esconde ao recolher, e a barra volta a mostrar só o
+   rótulo + o botão de recolher/expandir, exatamente como era antes de
+   o "LIMPAR" existir. Ele usa uma classe própria (".btn-limpar-dropzone"),
+   e não ".toggleDropzone" — antes as duas ficaram com a mesma classe
+   por engano e o "LIMPAR" girava 180° junto com a seta ao recolher.
    ============================================================ */
 
 /** Volta os cards de "Dados Extraídos" da página LME para o estado vazio ("-"). */
@@ -2123,6 +2113,7 @@ function limparPainelLME() {
     });
 }
 
+// Botão "LIMPAR" da página LME.
 document.getElementById("btnLimparLme")?.addEventListener("click", (e) => {
     // Esse botão vive dentro da barra que também recolhe/expande a área de
     // dropzones ao ser clicada (ver configurarToggleDropzone, MÓDULO 9) —
@@ -2152,14 +2143,79 @@ document.getElementById("btnLimparLme")?.addEventListener("click", (e) => {
 
     const campoResultado = document.getElementById("resultado");
     if (campoResultado) campoResultado.innerHTML = "";
-    localStorage.removeItem("automed_rascunhoResultado");   // ver MÓDULO 22, mais abaixo
+    localStorage.removeItem("automed_rascunhoResultado");   // ver MÓDULO 21, mais abaixo
+
+    mostrarToast("Campos limpos. Pronto para uma nova consulta.", "sucesso");
+});
+
+// Botão "LIMPAR" da página EXCEL.
+document.getElementById("btnLimparExcel")?.addEventListener("click", (e) => {
+    e.stopPropagation();   // mesmo motivo do botão da página LME, acima
+
+    textoPDFExcelAgendamento = "";
+    textoPDFExcelSolicitacao = "";
+    dadosBancoCarregados = null;
+
+    pdfExcelAgendamento.value = "";
+    pdfExcelSolicitacao.value = "";
+
+    const nomeAgendamento = document.getElementById("nomeArquivoExcelAgendamento");
+    const nomeSolicitacao = document.getElementById("nomeArquivoExcelSolicitacao");
+    if (nomeAgendamento) nomeAgendamento.textContent = "";
+    if (nomeSolicitacao) nomeSolicitacao.textContent = "";
+
+    const inputPesquisaExcel = document.getElementById("inputPesquisaExcel");
+    if (inputPesquisaExcel) inputPesquisaExcel.value = "";
+
+    atualizarLinhaExcel();   // com tudo zerado, isso deixa o campo de resultado vazio
+
+    mostrarToast("Campos limpos. Pronto para uma nova consulta.", "sucesso");
+});
+
+// Botão "LIMPAR" da página DOC (limpa os dois modos: LME Scan e Comissão de Ética).
+document.getElementById("btnLimparDoc")?.addEventListener("click", (e) => {
+    e.stopPropagation();   // mesmo motivo do botão da página LME, acima
+
+    textoConsultaDoc = "";
+    textoSolicitacaoDoc = "";
+    textoComissaoEtica = "";
+    arquivoRenomear = null;
+
+    pdfConsultaDoc.value = "";
+    pdfSolicitacaoDoc.value = "";
+    pdfComissaoEtica.value = "";
+    pdfRenomear.value = "";
+
+    const idsNomeArquivo = [
+        "nomeArquivoConsultaDoc", "nomeArquivoSolicitacaoDoc",
+        "nomeArquivoComissaoEtica", "nomeArquivoRenomear"
+    ];
+    idsNomeArquivo.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = "";
+    });
+
+    const nomeArquivoGerado = document.getElementById("nomeArquivoGerado");
+    if (nomeArquivoGerado) nomeArquivoGerado.value = "";
+
+    const inputPesquisaDoc = document.getElementById("inputPesquisaDoc");
+    if (inputPesquisaDoc) inputPesquisaDoc.value = "";
+
+    const idsPainelDoc = [
+        "dbgPacienteDoc", "dbgOMAbrDoc", "dbgDataDoc", "dbgEspecialidadeDoc",
+        "dbgSessaoComissao", "dbgPacienteComissao", "dbgDataComissao"
+    ];
+    idsPainelDoc.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = "-";
+    });
 
     mostrarToast("Campos limpos. Pronto para uma nova consulta.", "sucesso");
 });
 
 
 /* ============================================================
-   MÓDULO 20 — ESTATÍSTICAS DO BANCO DE DADOS (PÁGINA BANCO)
+   MÓDULO 19 — ESTATÍSTICAS DO BANCO DE DADOS (PÁGINA BANCO)
    O que este bloco faz: depois que a pasta do banco é lida (ver
    atualizarListaPacientesBanco, MÓDULO 14), calcula um resumo rápido
    — total de pacientes, OMs e especialidades mais frequentes — e
@@ -2205,7 +2261,7 @@ function atualizarEstatisticasBanco() {
 
 
 /* ============================================================
-   MÓDULO 21 — BACKUP DO BANCO DE DADOS (EXPORTAR / IMPORTAR)
+   MÓDULO 20 — BACKUP DO BANCO DE DADOS (EXPORTAR / IMPORTAR)
    O que este bloco faz: junta todos os "dados.json" das subpastas do
    banco em um único arquivo de backup (.json) para download, e faz o
    caminho inverso — lê um backup e recria as pastas que ainda não
@@ -2289,7 +2345,7 @@ document.getElementById("inputImportarBackup")?.addEventListener("change", async
 
 
 /* ============================================================
-   MÓDULO 22 — RASCUNHO AUTOMÁTICO DO RESULTADO GERADO (PÁGINA LME)
+   MÓDULO 21 — RASCUNHO AUTOMÁTICO DO RESULTADO GERADO (PÁGINA LME)
    O que este bloco faz: salva automaticamente, a cada geração ou
    edição manual, uma cópia do texto do DIEx no localStorage. Se o
    navegador fechar ou recarregar por acidente antes de copiar o

@@ -13,7 +13,6 @@
     9. Banco de dados local (barra superior e página BANCO)
    10. Mensagens flutuantes (toasts)
    11. Modais padronizados (duplicidade e exclusão)
-   12. Impressão do resultado gerado
    ============================================================ */
 
 
@@ -292,6 +291,38 @@ h3 {
     justify-content: center;
     transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.27);
     transform: rotate(0deg);
+}
+
+/* ------------------------------------------------------------
+   FUNCIONALIDADE NOVA — BOTÃO "LIMPAR" DA BARRA "ANEXAR PDF'S"
+   Fica ao lado do botão de recolher/expandir (".toggleDropzone"),
+   mas é uma classe própria — antes ele reaproveitava ".toggleDropzone"
+   e por isso girava 180° junto com a seta ao recolher a dropzone, o
+   que não fazia sentido (o "LIMPAR" não é uma seta indicando estado).
+   Quando a área é recolhida ele simplesmente some, e a barra volta a
+   mostrar só o rótulo + o botão de recolher/expandir — igual a antes
+   dessa funcionalidade existir.
+   ------------------------------------------------------------ */
+.btn-limpar-dropzone {
+    height: 30px;
+    margin: 0;
+    padding: 0 12px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+}
+
+.btn-limpar-dropzone:hover {
+    background: #1d2911;
+}
+
+.area-dropzones.recolhido .btn-limpar-dropzone {
+    display: none;
 }
 
 /* Conteúdo recolhível: a altura vai de 250px até 0 suavemente. */
@@ -1153,51 +1184,5 @@ footer.recolhido #toggleAbas:hover {
 
 .toast-fechar:hover {
     opacity: 1;
-}
-
-
-/* ============================================================
-   MÓDULO 12 — IMPRESSÃO DO RESULTADO GERADO
-   O que este bloco faz: quando o usuário manda imprimir (botão
-   "IMPRIMIR" ou Ctrl+P), esconde tudo da página, exceto o texto do
-   DIEx gerado, e devolve o "zoom" da página para 100% só na folha
-   impressa — evitando um documento minúsculo no papel.
-   ============================================================ */
-@media print {
-    body {
-        zoom: 1;
-        padding: 0;
-        background: white;
-        color: black;
-    }
-
-    /* Esconde todo mundo por padrão... */
-    body * {
-        visibility: hidden;
-    }
-
-    /* ...e revela só a área de resultado e o que está dentro dela. */
-    #resultado,
-    #resultado * {
-        visibility: visible;
-    }
-
-    #resultado {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        border: none;
-        background: white;
-        color: black;
-        padding: 20px;
-    }
-
-    /* O brasão de fundo, o rodapé e os toasts não fazem sentido no papel. */
-    .container::before,
-    footer,
-    #toastContainer {
-        display: none !important;
-    }
 }
 
