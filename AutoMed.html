@@ -6,25 +6,7 @@
     <title>Gerador DIEx de LME</title>
 
     <link rel="icon" type="image/png" href="imagem do AutoMed.ico">
-
-    <!-- ============================================================
-         FOLHA DE ESTILOS DIVIDIDA EM MÓDULOS (ver pasta /css)
-         A ordem dos <link> abaixo é a mesma ordem em que as regras
-         apareciam no antigo "style.css" — importante para manter o
-         resultado visual idêntico quando duas regras têm a mesma
-         especificidade CSS.
-         ============================================================ -->
-    <link rel="stylesheet" href="css/01-base.css">
-    <link rel="stylesheet" href="css/02-layout.css">
-    <link rel="stylesheet" href="css/03-cabecalho.css">
-    <link rel="stylesheet" href="css/04-dropzones.css">
-    <link rel="stylesheet" href="css/05-cards-dados.css">
-    <link rel="stylesheet" href="css/06-formularios.css">
-    <link rel="stylesheet" href="css/07-abas-paginas.css">
-    <link rel="stylesheet" href="css/08-rodape.css">
-    <link rel="stylesheet" href="css/09-banco-dados.css">
-    <link rel="stylesheet" href="css/10-toasts.css">
-    <link rel="stylesheet" href="css/11-modais.css">
+    <link rel="stylesheet" href="style.css">
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
@@ -56,6 +38,12 @@
             <div class="area-dropzones" id="areaDropzoneLme">
                 <div class="barra-dropzone-header" id="headerDropzoneLme">
                     <span class="label-dropzone">ANEXAR PDF'S</span>
+                    <!-- FUNCIONALIDADE NOVA: limpa os PDFs/dados desta consulta.
+                         Fica dentro da barra de anexos (não da barra do banco,
+                         que já está com o campo de busca ocupando o centro) e
+                         usa stopPropagation no script.js para não também
+                         recolher a área de dropzones ao ser clicado. -->
+                    <button type="button" id="btnLimparLme" class="toggleDropzone" style="width:auto; padding:0 10px; font-size:11px;" title="Limpa os PDFs e dados desta consulta para começar outra">LIMPAR</button>
                     <button type="button" id="toggleDropzoneLme" class="toggleDropzone" title="Recolher / Expandir Dropzones" aria-label="Recolher ou expandir área de anexos">▼</button>
                 </div>
                 <div class="conteudo-dropzones">
@@ -158,8 +146,9 @@
 3. Remeto, em anexo, os referidos laudos escaneados.</div>
 
                         <div id="modelo_remessa" class="modeloTexto area-editable" contenteditable="true">1. Informo a {PRONOME} {TIPO_OM} que {PRONOMEPACIENTE} paciente {PACIENTE} realizou consulta para confecção de <span class="var-tipo-doc">conferência médica</span>, no dia {DATA_MILITAR}<span class="var-sufixo-medico"></span>.</div>
+                    </div>
 
-                    <button id="gerarBtn">GERAR DIEx</button>
+                    <button id="gerarBtn" title="Atalho: Ctrl + Enter">GERAR DIEx</button>
 
                     <select id="pronomePaciente">
                         <option value="o">MASCULINO (O)</option>
@@ -176,7 +165,8 @@
                     <div class="bloco">
                         <h2>Resultado</h2>
                         <div id="resultado" class="area-editable" contenteditable="true"></div>
-                        <button id="copiarBtn">COPIAR TEXTO</button>
+                        <button id="copiarBtn" title="Atalho: Ctrl + Shift + C">COPIAR TEXTO</button>
+                        <button id="imprimirBtn" type="button">IMPRIMIR</button>
                     </div>
 
                 </main>
@@ -342,6 +332,21 @@
             <p>Selecione a pasta no seu computador onde os dados dos pacientes serão armazenados.</p>
             <div id="statusBanco" class="status-banco-grande">DESCONECTADO</div>
             <button id="btnConectarBanco" class="btn-conectar-central">CONECTAR PASTA DO BANCO</button>
+
+            <!-- FUNCIONALIDADE NOVA: backup do banco em um único arquivo .json,
+                 para não depender só da pasta local (pen drive, nuvem, etc.). -->
+            <button id="btnExportarBackup" type="button">EXPORTAR BACKUP (.JSON)</button>
+            <button id="btnImportarBackup" type="button">IMPORTAR BACKUP (.JSON)</button>
+            <input type="file" id="inputImportarBackup" accept=".json">
+        </div>
+
+        <!-- FUNCIONALIDADE NOVA: resumo do banco conectado (total de
+             pacientes, OMs e especialidades mais frequentes). Some quando
+             não há pacientes e reaparece sozinho ao conectar/atualizar. -->
+        <div id="estatisticasBanco" class="info-banco oculto">
+            <p><strong>Total de pacientes cadastrados:</strong> <span id="statTotalPacientes">0</span></p>
+            <p><strong>OMs mais frequentes:</strong> <span id="statTopOMs">-</span></p>
+            <p><strong>Especialidades mais frequentes:</strong> <span id="statTopEspecialidades">-</span></p>
         </div>
 
         <div class="info-banco">
@@ -441,31 +446,14 @@
 </div>
 
 <!-- ============================================================
-     LÓGICA DO SISTEMA, DIVIDIDA EM MÓDULOS (ver pasta /js)
-     Carregados como <script> comuns (sem type="module") de propósito:
+     LÓGICA DO SISTEMA (script.js) — comentada por módulos.
+     Carregado como <script> comum (sem type="module") de propósito:
      assim o sistema continua funcionando ao abrir o arquivo HTML
      diretamente do disco (duplo clique), sem precisar de um servidor
      local — módulos ES (type="module") são bloqueados pelo navegador
-     nesse cenário. Por isso a ORDEM dos scripts abaixo importa: cada
-     arquivo pode depender de funções/variáveis definidas nos
-     anteriores.
+     nesse cenário.
      ============================================================ -->
-<script src="js/01-toast.js"></script>
-<script src="js/02-estado.js"></script>
-<script src="js/03-referencias-dom.js"></script>
-<script src="js/04-base-conhecimento.js"></script>
-<script src="js/05-utils-texto.js"></script>
-<script src="js/06-formatadores.js"></script>
-<script src="js/07-extratores-pdf.js"></script>
-<script src="js/08-leitor-pdf.js"></script>
-<script src="js/09-dropzones.js"></script>
-<script src="js/10-paineis-extraidos.js"></script>
-<script src="js/11-gerador-diex.js"></script>
-<script src="js/12-renomeador-documentos.js"></script>
-<script src="js/13-navegacao-abas.js"></script>
-<script src="js/14-banco-dados.js"></script>
-<script src="js/15-excel.js"></script>
-<script src="js/16-inicializacao.js"></script>
+<script src="script.js"></script>
 
 </body>
 </html>
