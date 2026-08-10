@@ -8,7 +8,11 @@
     <link rel="icon" type="image/png" href="imagem do AutoMed.ico">
     <link rel="stylesheet" href="style.css">
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- pdf.js hospedado localmente (pasta vendor/pdfjs) em vez de vir de um
+         CDN externo: assim o AutoMed funciona mesmo sem internet ou em redes
+         restritas (ex.: rede do Exército), já que não depende de nenhum
+         servidor além dos arquivos deste mesmo diretório. -->
+    <script src="vendor/pdfjs/pdf.min.js"></script>
 </head>
 
 <body id="app">
@@ -367,7 +371,7 @@
 <footer id="footerSistema">
     <div class="rodapeEsquerda">
         <div class="info-versao">
-            <div class="versao">Versão 1.4.5</div>
+            <div class="versao">Versão 1.4.6</div>
             <div class="versaodata">Última Atualização 10/08/2026</div>
         </div>
     </div>

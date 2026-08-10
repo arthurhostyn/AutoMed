@@ -821,6 +821,14 @@ function extrairDadosComissaoEtica(texto) {
    os extratores do MÓDULO 7.
    ============================================================ */
 
+// Aponta o pdf.js para o worker também hospedado localmente (vendor/pdfjs),
+// em vez de deixá-lo buscar um worker via CDN. Sem isso, versões recentes do
+// pdf.js caem num modo de compatibilidade mais lento ("fake worker") e,
+// dependendo da rede, ainda tentam alcançar a internet nos bastidores.
+if (typeof pdfjsLib !== "undefined") {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdfjs/pdf.worker.min.js";
+}
+
 /**
  * Lê um arquivo PDF e devolve seu texto através do callback "aoConcluir".
  * @param {File} file - arquivo selecionado/arrastado pelo usuário.
