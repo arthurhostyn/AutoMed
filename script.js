@@ -2087,18 +2087,17 @@ document.addEventListener("keydown", (e) => {
 
 /* ============================================================
    MÓDULO 18 — NOVA CONSULTA (BOTÃO "LIMPAR" DAS DROPZONES)
-   O que este bloco faz: cada barra "ANEXAR PDF'S" (LME, EXCEL e DOC)
-   tem um botão "LIMPAR" ao lado do botão de recolher/expandir — zera
-   os PDFs anexados e os campos daquela página, sem precisar
-   recarregar tudo, para começar do zero rapidamente.
+   O que este bloco faz: em cada página (LME, EXCEL e DOC) existe um
+   botão "LIMPAR" ao lado da barra "ANEXAR PDF'S" — ele zera os PDFs
+   anexados e os campos daquela página, sem precisar recarregar tudo,
+   para começar uma nova consulta do zero.
 
-   REVISÃO: o botão "LIMPAR" só aparece com a dropzone aberta — a
-   regra ".area-dropzones.recolhido .btn-limpar-dropzone" (MÓDULO 4 do
-   style.css) o esconde ao recolher, e a barra volta a mostrar só o
-   rótulo + o botão de recolher/expandir, exatamente como era antes de
-   o "LIMPAR" existir. Ele usa uma classe própria (".btn-limpar-dropzone"),
-   e não ".toggleDropzone" — antes as duas ficaram com a mesma classe
-   por engano e o "LIMPAR" girava 180° junto com a seta ao recolher.
+   O "LIMPAR" é uma caixa independente, irmã da barra (e não um filho
+   dela) — ver ".linha-barra-dropzone" no MÓDULO 4 do style.css. Por
+   isso o clique aqui não tem como chegar ao listener que recolhe a
+   barra, e nenhum "stopPropagation" é necessário. Ele só aparece com a
+   dropzone aberta: ao recolher, encolhe até zero e a barra cresce
+   ocupando o espaço dele.
    ============================================================ */
 
 /** Volta os cards de "Dados Extraídos" da página LME para o estado vazio ("-"). */
@@ -2114,12 +2113,7 @@ function limparPainelLME() {
 }
 
 // Botão "LIMPAR" da página LME.
-document.getElementById("btnLimparLme")?.addEventListener("click", (e) => {
-    // Esse botão vive dentro da barra que também recolhe/expande a área de
-    // dropzones ao ser clicada (ver configurarToggleDropzone, MÓDULO 9) —
-    // sem isso, o clique "vazaria" para a barra e recolheria a área junto.
-    e.stopPropagation();
-
+document.getElementById("btnLimparLme")?.addEventListener("click", () => {
     // Zera o estado global relacionado à página LME.
     textoPDF = "";
     textoPDFSolicitacao = "";
@@ -2149,9 +2143,7 @@ document.getElementById("btnLimparLme")?.addEventListener("click", (e) => {
 });
 
 // Botão "LIMPAR" da página EXCEL.
-document.getElementById("btnLimparExcel")?.addEventListener("click", (e) => {
-    e.stopPropagation();   // mesmo motivo do botão da página LME, acima
-
+document.getElementById("btnLimparExcel")?.addEventListener("click", () => {
     textoPDFExcelAgendamento = "";
     textoPDFExcelSolicitacao = "";
     dadosBancoCarregados = null;
@@ -2173,9 +2165,7 @@ document.getElementById("btnLimparExcel")?.addEventListener("click", (e) => {
 });
 
 // Botão "LIMPAR" da página DOC (limpa os dois modos: LME Scan e Comissão de Ética).
-document.getElementById("btnLimparDoc")?.addEventListener("click", (e) => {
-    e.stopPropagation();   // mesmo motivo do botão da página LME, acima
-
+document.getElementById("btnLimparDoc")?.addEventListener("click", () => {
     textoConsultaDoc = "";
     textoSolicitacaoDoc = "";
     textoComissaoEtica = "";

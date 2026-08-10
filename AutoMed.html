@@ -36,19 +36,16 @@
 
             <!-- CONJUNTO DE DROPZONES DE LME -->
             <div class="area-dropzones" id="areaDropzoneLme">
-                <div class="barra-dropzone-header" id="headerDropzoneLme">
-                    <span class="label-dropzone">ANEXAR PDF'S</span>
-                    <!-- FUNCIONALIDADE NOVA: grupo com os botões Limpar e
-                         Recolher/Expandir, ancorado na borda direita da barra
-                         (mesmo recuo do botão SALVAR na barra do banco acima).
-                         Ao recolher a dropzone, o LIMPAR encolhe suavemente e o
-                         botão de Recolher (flex:1 dentro do grupo) cresce sozinho
-                         para ocupar o espaço — ver .grupo-acoes-dropzone no
-                         style.css. -->
-                    <div class="grupo-acoes-dropzone">
-                        <button type="button" id="btnLimparLme" class="btn-limpar-dropzone" title="Limpa os PDFs e dados desta consulta para começar outra">LIMPAR</button>
+                <!-- Duas caixas independentes lado a lado: a barra "ANEXAR PDF'S"
+                     e o botão "LIMPAR", separadas por um vão real. Ao recolher, o
+                     LIMPAR encolhe e a barra cresce ocupando o espaço dele — ver
+                     .linha-barra-dropzone no style.css. -->
+                <div class="linha-barra-dropzone">
+                    <div class="barra-dropzone-header" id="headerDropzoneLme">
+                        <span class="label-dropzone">ANEXAR PDF'S</span>
                         <button type="button" id="toggleDropzoneLme" class="toggleDropzone" title="Recolher / Expandir Dropzones" aria-label="Recolher ou expandir área de anexos"><span class="icone-toggle-dropzone">▼</span></button>
                     </div>
+                    <button type="button" id="btnLimparLme" class="btn-limpar-dropzone" title="Limpa os PDFs e dados desta consulta para começar outra">LIMPAR</button>
                 </div>
                 <div class="conteudo-dropzones">
                     <!-- Dropzone 1: PDF de Agendamento -->
@@ -194,12 +191,12 @@
         </div>
 
         <div class="area-dropzones" id="areaDropzoneExcel">
-            <div class="barra-dropzone-header" id="headerDropzoneExcel">
-                <span class="label-dropzone">ANEXAR PDF'S</span>
-                <div class="grupo-acoes-dropzone">
-                    <button type="button" id="btnLimparExcel" class="btn-limpar-dropzone" title="Limpa os PDFs e dados desta consulta para começar outra">LIMPAR</button>
+            <div class="linha-barra-dropzone">
+                <div class="barra-dropzone-header" id="headerDropzoneExcel">
+                    <span class="label-dropzone">ANEXAR PDF'S</span>
                     <button type="button" id="toggleDropzoneExcel" class="toggleDropzone" title="Recolher / Expandir Dropzones" aria-label="Recolher ou expandir área de anexos"><span class="icone-toggle-dropzone">▼</span></button>
                 </div>
+                <button type="button" id="btnLimparExcel" class="btn-limpar-dropzone" title="Limpa os PDFs e dados desta consulta para começar outra">LIMPAR</button>
             </div>
             <div class="conteudo-dropzones">
                 <div id="dropZoneExcelAgendamento" class="dropZoneDoc">
@@ -243,12 +240,12 @@
 
         <div id="blocoLmeScan">
             <div class="area-dropzones" id="areaDropzoneDoc">
-                <div class="barra-dropzone-header" id="headerDropzoneDoc">
-                    <span class="label-dropzone">ANEXAR PDF'S</span>
-                    <div class="grupo-acoes-dropzone">
-                        <button type="button" id="btnLimparDoc" class="btn-limpar-dropzone" title="Limpa os PDFs e dados desta consulta para começar outra">LIMPAR</button>
+                <div class="linha-barra-dropzone">
+                    <div class="barra-dropzone-header" id="headerDropzoneDoc">
+                        <span class="label-dropzone">ANEXAR PDF'S</span>
                         <button type="button" id="toggleDropzoneDoc" class="toggleDropzone" title="Recolher / Expandir Dropzones" aria-label="Recolher ou expandir área de anexos"><span class="icone-toggle-dropzone">▼</span></button>
                     </div>
+                    <button type="button" id="btnLimparDoc" class="btn-limpar-dropzone" title="Limpa os PDFs e dados desta consulta para começar outra">LIMPAR</button>
                 </div>
                 <div class="conteudo-dropzones">
                     <div id="dropZoneDocConsulta" class="dropZoneDoc">
