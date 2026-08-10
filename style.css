@@ -365,6 +365,7 @@ h3 {
     overflow: hidden;
     white-space: nowrap;
     opacity: 1;
+    pointer-events: auto;
     transition: background-color 0.2s ease,
                 width 0.35s cubic-bezier(0.16, 1, 0.3, 1),
                 margin-left 0.35s cubic-bezier(0.16, 1, 0.3, 1),
@@ -383,7 +384,24 @@ h3 {
 
 /* Estado recolhido: o LIMPAR encolhe até zero (largura, recuo e
    opacidade) e a barra — sendo "flex:1" — cresce em tempo real
-   ocupando exatamente o espaço liberado, sem deixar vão sobrando. */
+   ocupando exatamente o espaço liberado, sem deixar vão sobrando.
+
+   REVISÃO (bug do "flicker" ao aparecer): o mouse costuma ficar parado
+   bem em cima da seta (▼) logo depois do clique que expande a
+   dropzone — e é exatamente ali, ao lado dela, que o LIMPAR nasce com
+   largura 0 e cresce. Como o botão aceitava clique/hover desde o
+   primeiro pixel de largura, o mouse "entrava" nele no meio do
+   crescimento e disparava o hover (escurece o fundo) simultâneo à
+   animação de largura — dando a impressão de que o botão piscava.
+
+   A correção NÃO é só CSS: "pointer-events" não obedece
+   "transition-delay" (testado — o navegador ignora o atraso e troca o
+   valor na hora, mesmo com duração 0s e delay definido). Por isso o
+   travamento do clique/hover durante os 350ms de crescimento é feito
+   em JavaScript (ver configurarToggleDropzone, MÓDULO 9 do script.js),
+   que desliga e religa "pointer-events" no botão via timer. Aqui só
+   fica o estado recolhido em si (pointer-events:none já nasce
+   correto porque o botão deixou de existir visualmente). */
 .area-dropzones.recolhido .btn-limpar-dropzone {
     width: 0;
     margin-left: 0;
