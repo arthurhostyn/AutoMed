@@ -1,0 +1,9 @@
+{
+  "name": "automed",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AutoMed é um sistema estático (HTML/CSS/JS puro, sem build) — este package.json existe só para rodar os testes automatizados de logica.js com 'npm test'. Não é necessário instalar nada disso para USAR o AutoMed: basta abrir AutoMed.html no navegador.",
+  "scripts": {
+    "test": "node --test"
+  }
+}

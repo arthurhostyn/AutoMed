@@ -371,7 +371,7 @@
 <footer id="footerSistema">
     <div class="rodapeEsquerda">
         <div class="info-versao">
-            <div class="versao">Versão 1.4.6</div>
+            <div class="versao">Versão 1.4.7</div>
             <div class="versaodata">Última Atualização 10/08/2026</div>
         </div>
     </div>
@@ -456,13 +456,20 @@
 </div>
 
 <!-- ============================================================
-     LÓGICA DO SISTEMA (script.js) — comentada por módulos.
-     Carregado como <script> comum (sem type="module") de propósito:
+     LÓGICA DO SISTEMA — comentada por módulos, dividida em dois
+     arquivos que compartilham o mesmo escopo global:
+       1) logica.js  → dicionários, formatadores e extratores de PDF
+                        (sem dependência de DOM/navegador — por isso
+                        também é usado pelos testes automatizados em
+                        tests/logica.test.js)
+       2) script.js  → todo o resto (telas, eventos, banco local etc.)
+     Carregados como <script> comum (sem type="module") de propósito:
      assim o sistema continua funcionando ao abrir o arquivo HTML
      diretamente do disco (duplo clique), sem precisar de um servidor
      local — módulos ES (type="module") são bloqueados pelo navegador
      nesse cenário.
      ============================================================ -->
+<script src="logica.js"></script>
 <script src="script.js"></script>
 
 </body>

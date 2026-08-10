@@ -490,6 +490,14 @@ input[type="file"] {
     margin-top: 3px;
 }
 
+/* Marca visualmente um campo que não foi encontrado na extração do PDF
+   (ver definirValorCampo em script.js) — mesma cor de aviso usada nos
+   toasts, só para chamar a atenção sem parecer um erro grave. */
+.valor.campo-vazio {
+    color: #c05621;
+    font-style: italic;
+}
+
 .painel-extraidospag1 {
     margin-top: 20px;
 }
@@ -1009,6 +1017,25 @@ footer.recolhido #toggleAbas:hover {
     font-weight: bold;
     border: none;
     cursor: pointer;
+}
+
+.btn-conectar-central:disabled {
+    background: #555;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* Aviso fixo quando o navegador não suporta o Banco de Dados local
+   (ver MÓDULO 23 do script.js — File System Access API só existe em
+   navegadores baseados em Chromium). */
+.aviso-compatibilidade-banco {
+    margin-top: 20px;
+    padding: 14px 18px;
+    background: #382b19;
+    border-left: 4px solid #ed8936;
+    color: #f0dcb8;
+    text-align: left;
+    font-size: 14px;
 }
 
 .info-banco {
