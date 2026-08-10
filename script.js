@@ -1064,9 +1064,10 @@ function configurarToggleDropzone(headerId, containerId, storageKey) {
 
     if (!header || !container) return;   // página sem esse bloco: não faz nada
 
-    // Duração da animação de largura/opacidade do botão "LIMPAR" — tem que
-    // bater com a transição definida em ".btn-limpar-dropzone" no style.css.
-    const DURACAO_ANIMACAO_LIMPAR_MS = 350;
+    // Duração da animação de opacidade/largura do botão "LIMPAR" — tem que
+    // bater com a transição definida em ".btn-limpar-dropzone" no style.css
+    // (a mesma técnica/duração usada em #tipoLaudoConferenciaSelect).
+    const DURACAO_ANIMACAO_LIMPAR_MS = 550;
 
     function aplicarEstadoDropzone(recolher) {
         if (recolher) {
@@ -1074,20 +1075,15 @@ function configurarToggleDropzone(headerId, containerId, storageKey) {
         } else {
             container.classList.remove("recolhido");
 
-            // REVISÃO (bug do "flicker" ao aparecer): o mouse costuma ficar
-            // parado em cima da seta (▼) logo após o clique que expande a
-            // dropzone — bem onde o "LIMPAR" nasce com largura 0 e cresce.
-            // Sem isso, o mouse "entra" nele no meio do crescimento e
-            // dispara o hover (escurece o fundo) ao mesmo tempo que a
-            // animação de largura, parecendo que o botão pisca.
-            //
-            // A tentativa óbvia seria atrasar "pointer-events" por CSS
-            // (transition-delay) — mas essa propriedade não obedece atraso
-            // nenhum navegador testado: o valor troca na hora, ignorando o
-            // "delay". Por isso o travamento é feito aqui: desliga o
-            // clique/hover do botão por a mesma duração da animação e
-            // religa depois, garantindo que ele só reaja ao mouse quando já
-            // estiver com o tamanho final.
+            // O mouse costuma ficar parado em cima da seta (▼) logo após o
+            // clique que expande a dropzone — bem onde o "LIMPAR" nasce e
+            // cresce ao lado. Sem isto, o mouse "entra" nele no meio da
+            // animação e dispara o hover (escurece o fundo) por cima do
+            // esmaecimento/crescimento, dando a impressão de que pisca.
+            // Isso é puramente funcional (não muda nada visualmente): trava
+            // o clique/hover do botão por essa mesma duração e religa depois,
+            // garantindo que ele só reaja ao mouse quando já estiver com o
+            // tamanho e a opacidade finais.
             const btnLimpar = container.querySelector(".btn-limpar-dropzone");
             if (btnLimpar) {
                 btnLimpar.style.pointerEvents = "none";

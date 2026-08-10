@@ -350,6 +350,21 @@ h3 {
    "gap" na linha: o gap continuaria reservando espaço mesmo com o
    LIMPAR em largura 0, impedindo a barra de encostar na borda direita
    quando recolhida. */
+/* Botão "LIMPAR": segue a MESMA técnica de animação do select
+   "Conferência/Laudo" (#tipoLaudoConferenciaSelect, mais abaixo neste
+   arquivo) — todas as propriedades (opacidade, largura, recuo)
+   animam JUNTAS, com a mesma duração (0.55s) e a mesma curva
+   ("cubic-bezier(0.16, 1, 0.3, 1)"), num movimento só, em vez de
+   opacidade esperando a largura terminar. É o mesmo "jeito" de
+   esmaecer/encolher usado no resto do sistema.
+
+   Adaptação para esta função específica: o select tem largura
+   variável (max-width como teto); aqui o LIMPAR tem uma largura fixa
+   quando visível (110px, para caber o texto com folga), então quem
+   anima é a própria "width". E como esse botão é irmão da barra
+   "ANEXAR PDF'S" (que é "flex:1"), encolher a largura do LIMPAR já
+   faz a barra crescer sozinha para ocupar o espaço, sem precisar de
+   nenhuma regra extra. */
 .btn-limpar-dropzone {
     flex: 0 0 auto;
     width: 110px;
@@ -365,24 +380,13 @@ h3 {
     overflow: hidden;
     white-space: nowrap;
     opacity: 1;
+    visibility: visible;
     pointer-events: auto;
-    /* REVISÃO (o "pisca branco" ao aparecer): o texto branco "LIMPAR"
-       vinha sendo revelado JUNTO com o crescimento da largura — como o
-       texto mora dentro de uma caixa com "overflow:hidden" que muda de
-       tamanho a cada quadro, as letras (brancas, alto contraste contra
-       o fundo escuro) ficavam sendo "varridas"/recortadas repetidas
-       vezes em 350ms, e essa varredura rápida é o que o olho enxerga
-       como piscar. A correção separa as duas coisas: a LARGURA
-       continua crescendo (é o que faz a barra ao lado encolher, e
-       precisa ficar assim), mas a OPACIDADE do texto só começa a
-       animar depois que a caixa já está com ~60% do tamanho final
-       ("transition-delay" de 0.2s) — sobra pouco tempo de "varredura"
-       visível, e o texto só aparece quando a caixa já está quase
-       pronta, sem o efeito de piscar. */
-    transition: background-color 0.2s ease,
-                width 0.35s cubic-bezier(0.16, 1, 0.3, 1),
-                margin-left 0.35s cubic-bezier(0.16, 1, 0.3, 1),
-                opacity 0.15s ease 0.2s;
+    transition: opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+                width 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+                margin-left 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+                visibility 0.25s,
+                background-color 0.2s ease;
 }
 
 .btn-limpar-dropzone:hover {
@@ -395,38 +399,15 @@ h3 {
     outline-offset: -2px;
 }
 
-/* Estado recolhido: o LIMPAR encolhe até zero (largura, recuo e
-   opacidade) e a barra — sendo "flex:1" — cresce em tempo real
-   ocupando exatamente o espaço liberado, sem deixar vão sobrando.
-
-   REVISÃO (bug do "flicker" ao aparecer): o mouse costuma ficar parado
-   bem em cima da seta (▼) logo depois do clique que expande a
-   dropzone — e é exatamente ali, ao lado dela, que o LIMPAR nasce com
-   largura 0 e cresce. Como o botão aceitava clique/hover desde o
-   primeiro pixel de largura, o mouse "entrava" nele no meio do
-   crescimento e disparava o hover (escurece o fundo) simultâneo à
-   animação de largura — dando a impressão de que o botão piscava.
-
-   A correção NÃO é só CSS: "pointer-events" não obedece
-   "transition-delay" (testado — o navegador ignora o atraso e troca o
-   valor na hora, mesmo com duração 0s e delay definido). Por isso o
-   travamento do clique/hover durante os 350ms de crescimento é feito
-   em JavaScript (ver configurarToggleDropzone, MÓDULO 9 do script.js),
-   que desliga e religa "pointer-events" no botão via timer. Aqui só
-   fica o estado recolhido em si (pointer-events:none já nasce
-   correto porque o botão deixou de existir visualmente). */
+/* Estado recolhido: mesmo "oculto-select" do MÓDULO 6 — esmaece,
+   encolhe e some (visibility) num movimento só. A barra ao lado,
+   sendo "flex:1", cresce em tempo real ocupando o espaço liberado. */
 .area-dropzones.recolhido .btn-limpar-dropzone {
+    opacity: 0;
+    visibility: hidden;
     width: 0;
     margin-left: 0;
-    opacity: 0;
     pointer-events: none;
-    /* Ao recolher, o texto some ASSIM que o clique acontece (delay 0),
-       bem antes da largura terminar de encolher — evita que ele fique
-       sendo recortado/varrido durante o encolhimento também. */
-    transition: background-color 0.2s ease,
-                width 0.35s cubic-bezier(0.16, 1, 0.3, 1),
-                margin-left 0.35s cubic-bezier(0.16, 1, 0.3, 1),
-                opacity 0.1s ease 0s;
 }
 
 /* Conteúdo recolhível: a altura vai de 250px até 0 suavemente. */
