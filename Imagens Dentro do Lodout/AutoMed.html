@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador DIEx de LME</title>
+
+    <link rel="icon" type="image/png" href="imagem do AutoMed.ico">
+    <link rel="stylesheet" href="style.css">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+
+<body id="app">
+
+<!-- ============================================================
+     MÓDULO 2: PÁGINA "LME" (GERADOR DE DIEx DE LME)
+     ============================================================ -->
+<div class="pagina ativa" id="pagina-lme">
+
+        <div class="container">
+
+            <h1>GERADOR DIEX DE LME</h1>
+
+            <!-- Barra Superior de Conexão com a Pasta do Banco -->
+ <!-- BARRA DE CONTROLE DO BANCO (TOPO) -->
+            <div class="barra-banco-superior">
+
+                <div class="grupo-banco-acoes-topo">
+                    <select id="selectPacientesBanco" class="select-banco-topo">
+                        <option value="">-- Selecionar Paciente Salvo --</option>
+                    </select>
+                    <button id="btnInserirBanco" class="btn-banco-topo btn-salvar-topo">SALVAR</button>
+                </div>
+            </div>
+
+            <!-- Dropzone 1: PDF de Agendamento -->
+            <div id="dropZone">
+                <div class="textoDrop">
+                    Clique ou Arraste o PDF de Agendamento
+                </div>
+                <div id="nomeArquivoAgendamento" class="nomeArquivo"></div>
+                <input type="file" id="pdfFile" accept=".pdf">
+            </div>
+
+            <!-- Dropzone 2: PDF do DIEx de Solicitação -->
+            <div id="dropZoneSolicitacao">
+                <div class="textoDrop">
+                    Clique ou Arraste o PDF do DIEx de Solicitação
+                </div>
+                <div id="nomeArquivoSolicitacao" class="nomeArquivo"></div>
+                <input type="file" id="pdfSolicitacao" accept=".pdf">
+            </div>
+
+            <div class="conteudo-principal">
+
+                <!-- Painel lateral esquerdo: Dados Extraídos -->
+                <aside class="painel-extraidos">
+
+                    <h2>Dados Extraídos</h2>
+
+                    <div class="dados-extraidos">
+
+                        <div class="item-dado">
+                            <div class="titulo">Paciente</div>
+                            <div id="dbgPaciente" class="valor">-</div>
+                        </div>
+
+                        <div class="item-dado">
+                            <div class="titulo">Médico</div>
+                            <div id="dbgMedico" class="valor">-</div>
+                        </div>
+
+                        <div class="item-dado">
+                            <div class="titulo">Especialidade</div>
+                            <div id="dbgEspecialidade" class="valor">-</div>
+                        </div>
+
+                        <div class="item-dado">
+                            <div class="titulo">Data / Hora</div>
+                            <div id="dbgDataHora" class="valor">-</div>
+                        </div>
+
+                        <div class="item-dado">
+                            <div class="titulo">Local</div>
+                            <div id="dbgLocal" class="valor">-</div>
+                        </div>
+
+                        <div class="item-dado">
+                            <div class="titulo">OM Solicitante</div>
+                            <div id="dbgOM" class="valor">-</div>
+                        </div>
+
+                        <div class="item-dado">
+                            <div class="titulo">OM Abreviada</div>
+                            <div id="dbgOMAbr" class="valor">-</div>
+                        </div>
+
+                        <div class="item-dado">
+                            <div class="titulo">Tipo OM</div>
+                            <div id="dbgTipoOM" class="valor">-</div>
+                        </div>
+
+                    </div>
+
+                    <div class="imagemPainel"></div>
+
+                </aside>
+
+                <!-- Área principal: Escolha do modelo + geração do resultado + Banco -->
+<!-- Área principal: Escolha do modelo + Banco de Dados + Geração -->
+                <main class="area-principal">
+
+                    <div class="bloco">
+
+                        <select id="modeloSelect" style="flex: 1;">
+                            <option value="agendamento">DIEx DE AGENDAMENTO</option>
+                            <option value="s2">DIEx DE LAUDO PARA S2</option>
+                            <option value="remessa">DIEx DE REMESSA PARA OM</option>
+                        </select>
+                        
+
+                        <h2>Modelo de Texto</h2>
+
+                        <textarea id="modelo_agendamento" class="modeloTexto">
+1. Informo a {PRONOME} {TIPO_OM}, em resposta ao documento de referência, o agendamento de consulta para confecção de Laudo Médico Especializado para {PRONOMEPACIENTE} {PACIENTE}, conforme descrito abaixo:
+
+- Médico: {MEDICO};
+
+- Especialidade: {ESPECIALIDADE};
+
+- Data: {DATA} - {DIASEMANA};
+
+- Horário: {HORARIO}h;
+
+- Local: {LOCAL}.</textarea>
+
+                        <textarea id="modelo_s2" class="modeloTexto">
+1. Por ordem da Cel SIMONE ABREU, solicito a remessa de conferência médica d{PRONOMEPACIENTE} {PACIENTE} – {OMABR}, realizado no dia {DATA_MILITAR}.
+
+2. O documento deverá ser enviado, pelo sistema da 2ª Seção, para o {CARGO_OM} do {OM}.
+
+3. Remeto, em anexo, os referidos laudos escaneados.</textarea>
+
+                        <textarea id="modelo_remessa" class="modeloTexto">
+1. Informo a {PRONOME} {TIPO_OM} que {PRONOMEPACIENTE} paciente {PACIENTE} realizou consulta para confecção de Laudo Médico Especializado - LME, no dia {DATA_MILITAR}, com o {MEDICO}.</textarea>
+
+                    </div>
+
+                    <button id="gerarBtn">GERAR DIEx</button>
+
+                    <select id="pronomePaciente">
+                        <option value="o">MASCULINO (O)</option>
+                        <option value="a">FEMININO (A)</option>
+                    </select>
+
+                    <div class="bloco">
+                        <h2>Resultado</h2>
+                        <textarea id="resultado"></textarea>
+                        <button id="copiarBtn">COPIAR TEXTO</button>
+                    </div>
+
+                </main>
+
+            </div>
+
+        </div>
+
+</div>
+
+
+<!-- ============================================================
+     MÓDULO 3: PÁGINA "DOC" (RENOMEADOR DE DOCUMENTOS)
+     ============================================================ -->
+<div class="pagina" id="pagina-doc">
+
+    <div class="container">
+
+        <h3>RENOMEADOR DE DOCUMENTOS</h3>
+
+        <select id="tipodocumento">
+            <option value="o">LME SCAN</option>
+            <option value="a">COMISSÃO DE ÉTICA</option>
+        </select>
+
+        <div id="blocoLmeScan">
+
+            <div id="dropZoneDocConsulta" class="dropZoneDoc">
+                <div class="textoDrop">Clique ou Arraste o PDF de Marcação</div>
+                <div id="nomeArquivoConsultaDoc" class="nomeArquivo"></div>
+                <input type="file" id="pdfConsultaDoc" accept=".pdf">
+            </div>
+
+            <div id="dropZoneDocSolicitacao" class="dropZoneDoc">
+                <div class="textoDrop">Clique ou Arraste o PDF de Solicitação</div>
+                <div id="nomeArquivoSolicitacaoDoc" class="nomeArquivo"></div>
+                <input type="file" id="pdfSolicitacaoDoc" accept=".pdf">
+            </div>
+
+            <div id="dropZoneDocArquivo" class="dropZoneDoc">
+                <div class="textoDrop">Clique ou Arraste o PDF a ser Renomeado</div>
+                <div id="nomeArquivoRenomear" class="nomeArquivo"></div>
+                <input type="file" id="pdfRenomear" accept=".pdf">
+            </div>
+
+        </div>
+
+        <div id="blocoComissaoEtica" class="oculto">
+            <div id="dropZoneComissaoEtica" class="dropZoneDoc">
+                <div class="textoDrop">Clique ou Arraste o Scan da Comissão de Ética</div>
+                <div id="nomeArquivoComissaoEtica" class="nomeArquivo"></div>
+                <input type="file" id="pdfComissaoEtica" accept=".pdf">
+            </div>
+        </div>
+
+        <input type="text" id="nomeArquivoGerado">
+
+        <aside class="painel-extraidos">
+            <h2>Dados Extraídos</h2>
+
+            <div id="painelExtraidosLmeScan" class="dados-extraidos-horizontal">
+                <div class="item-dado">
+                    <div class="titulo">Paciente</div>
+                    <div id="dbgPacienteDoc" class="valor">-</div>
+                </div>
+                <div class="item-dado">
+                    <div class="titulo">OM</div>
+                    <div id="dbgOMAbrDoc" class="valor">-</div>
+                </div>
+                <div class="item-dado">
+                    <div class="titulo">Data</div>
+                    <div id="dbgDataDoc" class="valor">-</div>
+                </div>
+                <div class="item-dado">
+                    <div class="titulo">Especialidade</div>
+                    <div id="dbgEspecialidadeDoc" class="valor">-</div>
+                </div>
+            </div>
+
+            <div id="painelExtraidosComissao" class="dados-extraidos-horizontal oculto">
+                <div class="item-dado">
+                    <div class="titulo">Sessão</div>
+                    <div id="dbgSessaoComissao" class="valor">-</div>
+                </div>
+                <div class="item-dado">
+                    <div class="titulo">Paciente</div>
+                    <div id="dbgPacienteComissao" class="valor">-</div>
+                </div>
+                <div class="item-dado">
+                    <div class="titulo">Data</div>
+                    <div id="dbgDataComissao" class="valor">-</div>
+                </div>
+            </div>
+        </aside>
+
+        <div class="botoesDoc">
+            <button id="gerarNomeBtn">GERAR NOME</button>
+            <button id="renomearBtn">BAIXAR PDF</button>
+        </div>
+
+    </div>
+
+    <div class="imagemPainelDoc"></div>
+
+</div>
+
+
+<!-- ============================================================
+     MÓDULO 4: PÁGINA "CONFIG."
+     ============================================================ -->
+<div class="pagina" id="pagina-banco">
+    <div class="container">
+        <h3>GERENCIADOR DO BANCO DE DADOS</h3>
+        
+        <div class="cartao-conexao">
+            <p>Selecione a pasta no seu computador onde os dados dos pacientes serão armazenados.</p>
+            <div id="statusBanco" class="status-banco-grande">STATUS: DESCONECTADO</div>
+            <button id="btnConectarBanco" class="btn-conectar-central">CONECTAR PASTA DO BANCO</button>
+        </div>
+
+        <div class="info-banco">
+            <p><strong>Atenção:</strong> O navegador solicita permissão toda vez que o sistema é recarregado por questões de segurança.</p>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     MÓDULO 5: RODAPÉ FIXO
+     ============================================================ -->
+<footer id="footerSistema">
+
+    <div class="rodapeEsquerda">
+        <div class="info-versao">
+            <div class="versao">Versão 1.3.3</div>
+            <div class="versaodata">Última Atualização 24/07/2026</div>
+        </div>
+    </div>
+
+    <div class="rodapeCentro">
+        <button id="toggleAbas" class="toggleAbas">OCULTAR</button>
+        <div id="conteudoAbas">
+            <button class="aba ativa" data-aba="lme">LME</button>
+            <button class="aba" data-aba="doc">DOC</button>
+            <button class="aba" data-aba="banco">BANCO</button>    
+        </div>
+    </div>
+
+    <div class="rodapeDireita">
+        <div class="assinatura">
+            <div class="autor">Developed by: CB HOSTYN</div>
+            <div class="frase">"O fogo que corrói os mais fracos, é o mesmo que forja os mais fortes"</div>
+            <div class="turma">CFC 25</div>
+        </div>
+    </div>
+
+</footer>
+
+<script src="script.js"></script>
+
+</body>
+</html>

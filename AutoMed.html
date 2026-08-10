@@ -3,157 +3,463 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gerador de DIEx - HMAPA</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Gerador DIEx de LME</title>
+
     <link rel="icon" type="image/png" href="imagem do AutoMed.ico">
-    <!-- Biblioteca pdf.js para leitura de PDFs -->
+    <link rel="stylesheet" href="style.css">
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 
-<body>
+<body id="app">
 
-    <div class="container">
+<!-- ============================================================
+     PÁGINA "LME" (GERADOR DE DIEx DE LME)
+     ============================================================ -->
+<div class="pagina ativa" id="pagina-lme">
 
-        <h1>GERADOR DE DIEx SAME</h1>
+        <div class="container">
 
-        <!-- Dropzone Única -->
-        <div id="dropZone" class="dropzone">
-            <div class="textoDrop">Clique ou Arraste o PDF de Agendamento / Marcação</div>
-            <div id="nomeArquivoAgendamento" class="nomeArquivo"></div>
-            <input type="file" id="pdfFile" accept=".pdf">
-        </div>
+            <h1>GERADOR DIEX DE LME</h1>
 
-        <div class="conteudo-principal">
+            <!-- BARRA DE CONTROLE DO BANCO (TOPO) -->
+            <div class="barra-banco-superior">
+                <button id="btnExcluirBanco" class="btn-banco-topo">EXCLUIR</button>
 
-            <!-- Painel Esquerdo: Dados Extraídos -->
-            <aside class="painel-extraidos">
-                <h2>Dados Extraídos</h2>
-
-                <div class="dados-extraidos">
-
-                    <div class="item-dado">
-                        <div class="titulo">Paciente</div>
-                        <div id="dbgPaciente" class="valor">-</div>
-                    </div>
-
-                    <div class="item-dado">
-                        <div class="titulo">Prontuário</div>
-                        <div id="dbgProntuario" class="valor">-</div>
-                    </div>
-
-                    <div class="item-dado">
-                        <div class="titulo">Médico / Profissional</div>
-                        <div id="dbgMedico" class="valor">-</div>
-                    </div>
-
-                    <div class="item-dado">
-                        <div class="titulo">Especialidade</div>
-                        <div id="dbgEspecialidade" class="valor">-</div>
-                    </div>
-
-                    <div class="item-dado">
-                        <div class="titulo">Data / Hora</div>
-                        <div id="dbgDataHora" class="valor">-</div>
-                    </div>
-
-                    <div class="item-dado">
-                        <div class="titulo">Local</div>
-                        <div id="dbgLocal" class="valor">-</div>
-                    </div>
-
+                <div class="grupo-select-central">
+                    <input type="text" id="inputPesquisaBanco" class="select-banco-topo" placeholder="Pesquisar Paciente..." list="listaPacientesBanco" autocomplete="off">
+                    <datalist id="listaPacientesBanco"></datalist>
                 </div>
 
-                <div class="imagemPainel"></div>
-            </aside>
+                <button id="btnInserirBanco" class="btn-banco-topo">SALVAR</button>
+            </div>
 
-            <!-- Área Principal -->
-            <main class="area-principal">
-
-                <div class="bloco">
-                    <h2>Modelo de Resposta</h2>
-
-                    <select id="modeloSelect">
-                        <option value="consulta">DIEx CONSULTA PRESENCIAL</option>
-                        <option value="teleconsulta">DIEx TELECONSULTA</option>
-                    </select>
-
-                    <!-- Modelo 1: DIEx nº 7686 (Visualização Formatada de Negrito/Sublinhado) -->
-                    <div id="modelo_consulta" contenteditable="true" class="modeloTexto caixa-resultado">
-1. Em resposta ao DIEx referenciado, informo-vos agendamento de consulta com <b>{ESPECIALIDADE} ({MEDICO})</b> para <b>{PRONOMEPACIENTE} {PACIENTE} (prontuário {PRONTUARIO})</b>, <u><b>em {DATA}, às {HORARIO}, no {LOCAL}</b></u> desta OMS.<br><br>
-<b><u>IMPORTANTE:</u></b><br>
-a. <u><b>Caso não seja conveniente este dia da consulta, solicitamos que retorne mensagem Whatsapp (51) 2111-8385 (somente mensagens) para alteração e realização de nova marcação de consulta e para informações gerais.</b></u><br>
-b. <u><b>Estamos com a incidência muito alta de faltas às consultas ambulatoriais. Informamos que a ocorrência de faltas contumazes, não justificadas, pode gerar bloqueio do acesso à marcação pelo sistema SIGH Web. Avise com antecedência o cancelamento de sua consulta.</b></u><br><br>
-2. O próprio paciente/titular ou a Seção de Saúde da OM poderá marcar nova consulta, bastando fazer login no link <u>https://sighhmapa.3rm.eb.mil.br/paciente/seg</u> preenchendo as lacunas com os dados abaixo:<br>
-- <b>Usuário (prontuário): {PRONTUARIO}</b><br>
-- <b>Senha: {SENHA}</b><br><br>
-3. Solicitamos que o (a) paciente seja informado (a) da possibilidade do autoatendimento. Todavia, caso haja necessidade de atualizar seu cadastro, principalmente telefone (Whatsapp) e e-mail, solicitamos o envio de uma mensagem para o telefone Whatsapp do SAME <u><b>(51) 2111-8385 (somente mensagens)</b></u>, informando os dados a serem atualizados.<br><br>
-<b><u>Observação:</u> Para os casos de urgência/emergência clínica, ou onde houver risco à vida própria ou de terceiros, o paciente pode ser conduzido para o Pronto Atendimento Médico de imediato, ou em qualquer dia da semana, preferencialmente pela manhã.</b>
+            <!-- CONJUNTO DE DROPZONES DE LME -->
+            <div class="area-dropzones" id="areaDropzoneLme">
+                <!-- Duas caixas independentes lado a lado: a barra "ANEXAR PDF'S"
+                     e o botão "LIMPAR", separadas por um vão real. Ao recolher, o
+                     LIMPAR encolhe e a barra cresce ocupando o espaço dele — ver
+                     .linha-barra-dropzone no style.css. -->
+                <div class="linha-barra-dropzone">
+                    <div class="barra-dropzone-header" id="headerDropzoneLme">
+                        <span class="label-dropzone">ANEXAR PDF'S</span>
+                        <button type="button" id="toggleDropzoneLme" class="toggleDropzone" title="Recolher / Expandir Dropzones" aria-label="Recolher ou expandir área de anexos"><span class="icone-toggle-dropzone">▼</span></button>
+                    </div>
+                    <button type="button" id="btnLimparLme" class="btn-limpar-dropzone" title="Limpa os PDFs e dados desta consulta para começar outra">LIMPAR</button>
+                </div>
+                <div class="conteudo-dropzones">
+                    <!-- Dropzone 1: PDF de Agendamento -->
+                    <div id="dropZone" class="dropZoneDoc">
+                        <div class="textoDrop">Clique ou Arraste o PDF de Agendamento</div>
+                        <div id="nomeArquivoAgendamento" class="nomeArquivo"></div>
+                        <input type="file" id="pdfFile" accept=".pdf">
                     </div>
 
-                    <!-- Modelo 2: DIEx nº 7536 (Visualização Formatada de Negrito/Sublinhado) -->
-                    <div id="modelo_teleconsulta" contenteditable="true" class="modeloTexto caixa-resultado">
-1. Em resposta ao DIEx referenciado, confirmação de teleconsulta com <b>{ESPECIALIDADE} ({MEDICO})</b> para <b>{PRONOMEPACIENTE} {PACIENTE} (prontuário {PRONTUARIO})</b> <u><b>em {DATA}, às {HORARIO}</b></u>.<br><br>
-<b><u>IMPORTANTE:</u></b><br>
-a. <u><b>Sua consulta não tem horário definido. Como se trata de uma consulta extra ("encaixe"), orientamos ao paciente que compareça por volta do início do atendimento ambulatorial e informe ao médico que se encontra para uma consulta de encaixe. Ele irá lhe atender durante seu turno de agenda.</b></u><br>
-b. <u><b>Caso não seja conveniente este dia da consulta, solicitamos que retorne mensagem Whatsapp (51) 2111-8385 (somente mensagem) alteração e realização de nova marcação de consulta e o nº (51) 99988-3296 (somente mensagem) para informações gerais.</b></u><br>
-c. <u><b>Estamos com a incidência elevada de faltas às consultas ambulatoriais. Informamos que a ocorrência de faltas contumazes, não justificadas, pode gerar bloqueio do acesso à marcação pelo sistema SIGH Web.</b></u><br><br>
-2. Orientações:<br>
-A OM deve entrar em contato com a informática 30 minutos antes para <b>TESTE</b> do link oficial, <u>https://sighhmapa.3rm.eb.mil.br/paciente/seg</u><br>
-O "link" deverá ser testado em momento anterior à consulta; em caso de dificuldade de acesso, poderá ser solicitado o auxílio da Seção de Informática desta OMS pelo telefone (51)2111-8326.<br>
-- Após o login, acessar a aba de consultas agendadas do SIGH-WEB e clicar na consulta agendada no dia informado.<br>
-- <b>Usuário (prontuário): {PRONTUARIO}</b><br>
-- <b>Senha (do paciente): {SENHA}</b><br><br>
-<b>Observações:</b> Dúvidas sobre a consulta poderão ser sanadas pelo SAME do HMAPA, por mensagens via Whatsapp <u><b>(51) 99988-3296</b></u> ou pelo e-mail <u>same@hmapa.eb.mil.br</u>
+                    <!-- Dropzone 2: PDF do DIEx de Solicitação -->
+                    <div id="dropZoneSolicitacao" class="dropZoneDoc">
+                        <div class="textoDrop">Clique ou Arraste o PDF do DIEx de Solicitação</div>
+                        <div id="nomeArquivoSolicitacao" class="nomeArquivo"></div>
+                        <input type="file" id="pdfSolicitacao" accept=".pdf">
                     </div>
                 </div>
+            </div>
 
-                <div class="controles-geracao">
+            <div class="conteudo-principal">
+
+                <!-- Painel lateral esquerdo: Dados Extraídos -->
+                <aside class="painel-extraidos">
+                    <h2>Dados Extraídos</h2>
+
+                    <div class="dados-extraidos">
+                        <div class="item-dado">
+                            <div class="titulo">Paciente</div>
+                            <div id="dbgPaciente" class="valor">-</div>
+                        </div>
+
+                        <div class="item-dado">
+                            <div class="titulo">Médico</div>
+                            <div id="dbgMedico" class="valor">-</div>
+                        </div>
+
+                        <div class="item-dado">
+                            <div class="titulo">Especialidade</div>
+                            <div id="dbgEspecialidade" class="valor">-</div>
+                        </div>
+
+                        <div class="item-dado">
+                            <div class="titulo">Data / Hora</div>
+                            <div id="dbgDataHora" class="valor">-</div>
+                        </div>
+
+                        <div class="item-dado">
+                            <div class="titulo">Local</div>
+                            <div id="dbgLocal" class="valor">-</div>
+                        </div>
+
+                        <div class="item-dado">
+                            <div class="titulo">OM Solicitante</div>
+                            <div id="dbgOM" class="valor">-</div>
+                        </div>
+
+                        <div class="item-dado">
+                            <div class="titulo">OM Abreviada</div>
+                            <div id="dbgOMAbr" class="valor">-</div>
+                        </div>
+
+                        <div class="item-dado">
+                            <div class="titulo">Tipo OM</div>
+                            <div id="dbgTipoOM" class="valor">-</div>
+                        </div>
+                    </div>
+
+                    <div class="imagemPainel"></div>
+                </aside>
+
+                <!-- Área principal: Escolha do modelo + Banco de Dados + Geração -->
+                <main class="area-principal">
+
+                    <div class="bloco">
+                        <select id="modeloSelect" style="flex: 1;">
+                            <option value="agendamento">DIEx DE AGENDAMENTO</option>
+                            <option value="s2">DIEx DE ENVIO PARA S2</option>
+                            <option value="remessa">DIEx DE REMESSA PARA OM</option>
+                        </select>
+
+                        <h2>Modelo de Texto</h2>
+
+                        <div id="modelo_agendamento" class="modeloTexto area-editable" contenteditable="true">1. Informo a {PRONOME} {TIPO_OM}, em resposta ao documento de referência, o agendamento de consulta para confecção de Laudo Médico Especializado para {PRONOMEPACIENTE} {PACIENTE}, conforme descrito abaixo:
+
+- <b>Médico:</b> {MEDICO};
+
+- <b>Especialidade:</b> {ESPECIALIDADE};
+
+- <b>Data:</b> {DATA} - {DIASEMANA};
+
+- <b>Horário:</b> {HORARIO}h;
+
+- <b>Local:</b> {LOCAL}.</div>
+
+                        <!-- MODELOS COM VARIÁVEIS INTERNAS (spans) -->
+                        <div id="modelo_s2" class="modeloTexto area-editable" contenteditable="true">1. Por ordem da Cel SIMONE ABREU, solicito a remessa de <span class="var-tipo-doc">conferência médica</span> d{PRONOMEPACIENTE} {PACIENTE} – {OMABR}, realizado no dia {DATA_MILITAR}<span class="var-sufixo-medico"></span>.
+
+2. O documento deverá ser enviado, pelo sistema da 2ª Seção, para o {CARGO_OM} do {OM}.
+
+3. Remeto, em anexo, os referidos laudos escaneados.</div>
+
+                        <div id="modelo_remessa" class="modeloTexto area-editable" contenteditable="true">1. Informo a {PRONOME} {TIPO_OM} que {PRONOMEPACIENTE} paciente {PACIENTE} realizou consulta para confecção de <span class="var-tipo-doc">conferência médica</span>, no dia {DATA_MILITAR}<span class="var-sufixo-medico"></span>.</div>
+                    </div>
+
+                    <button id="gerarBtn" title="Atalho: Ctrl + Enter">GERAR DIEx</button>
+
                     <select id="pronomePaciente">
-                        <option value="o Sr.">MASCULINO (o Sr.)</option>
-                        <option value="a Sra.">FEMININO (a Sra.)</option>
+                        <option value="o">MASCULINO (O)</option>
+                        <option value="a">FEMININO (A)</option>
                     </select>
 
-                    <input type="text" id="inputSenha" placeholder="Senha SIGH-WEB">
 
-                    <button id="gerarBtn">GERAR DIEx</button>
-                </div>
+                        <!-- SELECT COM A CLASSE DE TRANSIÇÃO -->
+                        <select id="tipoLaudoConferenciaSelect" class="oculto-select">
+                            <option value="conferencia">CONFERÊNCIA</option>
+                            <option value="laudo">LAUDO</option>
+                        </select>
 
-                <div class="bloco">
-                    <h2>Resultado</h2>
-                    <!-- Caixa de resultado editável com suporte a Rich Text (HTML) -->
-                    <div id="resultado" contenteditable="true" class="caixa-resultado"></div>
-                    <button id="copiarBtn">COPIAR TEXTO</button>
-                </div>
+                    <div class="bloco">
+                        <h2>Resultado</h2>
+                        <div id="resultado" class="area-editable" contenteditable="true"></div>
+                        <button id="copiarBtn" title="Atalho: Ctrl + Shift + C">COPIAR TEXTO</button>
+                    </div>
 
-            </main>
+                </main>
+
+            </div>
 
         </div>
 
+</div>
+
+<!-- ============================================================
+     PÁGINA "EXCEL" (GERADOR DE LINHA EXCEL)
+     ============================================================ -->
+<div class="pagina" id="pagina-excel">
+    <div class="container">
+        <h1>GERADOR DE LINHA EXCEL</h1>
+
+        <div class="barra-banco-superior">
+            <div class="grupo-select-central">
+                <input type="text" id="inputPesquisaExcel" class="select-banco-topo" placeholder="Pesquisar Paciente..." list="listaPacientesBanco" autocomplete="off">
+            </div>
+        </div>
+
+        <div class="area-dropzones" id="areaDropzoneExcel">
+            <div class="linha-barra-dropzone">
+                <div class="barra-dropzone-header" id="headerDropzoneExcel">
+                    <span class="label-dropzone">ANEXAR PDF'S</span>
+                    <button type="button" id="toggleDropzoneExcel" class="toggleDropzone" title="Recolher / Expandir Dropzones" aria-label="Recolher ou expandir área de anexos"><span class="icone-toggle-dropzone">▼</span></button>
+                </div>
+                <button type="button" id="btnLimparExcel" class="btn-limpar-dropzone" title="Limpa os PDFs e dados desta consulta para começar outra">LIMPAR</button>
+            </div>
+            <div class="conteudo-dropzones">
+                <div id="dropZoneExcelAgendamento" class="dropZoneDoc">
+                    <div class="textoDrop">Clique ou Arraste o PDF de Agendamento</div>
+                    <div id="nomeArquivoExcelAgendamento" class="nomeArquivo"></div>
+                    <input type="file" id="pdfExcelAgendamento" accept=".pdf">
+                </div>
+
+                <div id="dropZoneExcelSolicitacao" class="dropZoneDoc">
+                    <div class="textoDrop">Clique ou Arraste o PDF do DIEx de Solicitação</div>
+                    <div id="nomeArquivoExcelSolicitacao" class="nomeArquivo"></div>
+                    <input type="file" id="pdfExcelSolicitacao" accept=".pdf">
+                </div>
+            </div>
+        </div>
+
+        <input type="text" id="resultadoExcel" placeholder="A linha formatada para o Excel aparecerá aqui automaticamente...">
+
+        <div class="botoesDoc">
+            <button id="copiarExcelBtn" style="width: 100%;">COPIAR PARA EXCEL</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- ============================================================
+     PÁGINA "DOC" (RENOMEADOR DE DOCUMENTOS)
+     ============================================================ -->
+<div class="pagina" id="pagina-doc">
+    <div class="container">
+        <h3>RENOMEADOR DE DOCUMENTOS</h3>
+
+        <div class="botoesDoc">
+            <select id="tipodocumento">
+                <option value="o">LME SCAN</option>
+                <option value="a">COMISSÃO DE ÉTICA</option>
+            </select>
+
+            <input type="text" id="inputPesquisaDoc" class="select-banco-topo" placeholder="Pesquisar Paciente..." list="listaPacientesBanco" autocomplete="off">
+        </div>
+
+        <div id="blocoLmeScan">
+            <div class="area-dropzones" id="areaDropzoneDoc">
+                <div class="linha-barra-dropzone">
+                    <div class="barra-dropzone-header" id="headerDropzoneDoc">
+                        <span class="label-dropzone">ANEXAR PDF'S</span>
+                        <button type="button" id="toggleDropzoneDoc" class="toggleDropzone" title="Recolher / Expandir Dropzones" aria-label="Recolher ou expandir área de anexos"><span class="icone-toggle-dropzone">▼</span></button>
+                    </div>
+                    <button type="button" id="btnLimparDoc" class="btn-limpar-dropzone" title="Limpa os PDFs e dados desta consulta para começar outra">LIMPAR</button>
+                </div>
+                <div class="conteudo-dropzones">
+                    <div id="dropZoneDocConsulta" class="dropZoneDoc">
+                        <div class="textoDrop">Clique ou Arraste o PDF de Marcação</div>
+                        <div id="nomeArquivoConsultaDoc" class="nomeArquivo"></div>
+                        <input type="file" id="pdfConsultaDoc" accept=".pdf">
+                    </div>
+
+                    <div id="dropZoneDocSolicitacao" class="dropZoneDoc">
+                        <div class="textoDrop">Clique ou Arraste o PDF de Solicitação</div>
+                        <div id="nomeArquivoSolicitacaoDoc" class="nomeArquivo"></div>
+                        <input type="file" id="pdfSolicitacaoDoc" accept=".pdf">
+                    </div>
+                </div>
+            </div>
+
+            <div id="dropZoneDocArquivo" class="dropZoneDoc">
+                <div class="textoDrop">Clique ou Arraste o PDF a ser Renomeado</div>
+                <div id="nomeArquivoRenomear" class="nomeArquivo"></div>
+                <input type="file" id="pdfRenomear" accept=".pdf">
+            </div>
+        </div>
+
+        <div id="blocoComissaoEtica" class="oculto">
+            <div id="dropZoneComissaoEtica" class="dropZoneDoc">
+                <div class="textoDrop">Clique ou Arraste o Scan da Comissão de Ética</div>
+                <div id="nomeArquivoComissaoEtica" class="nomeArquivo"></div>
+                <input type="file" id="pdfComissaoEtica" accept=".pdf">
+            </div>
+        </div>
+
+        <input type="text" id="nomeArquivoGerado">
+
+        <aside class="painel-extraidos">
+            <h2>Dados Extraídos</h2>
+
+            <div id="painelExtraidosLmeScan" class="dados-extraidos-horizontal">
+                <div class="item-dado">
+                    <div class="titulo">Paciente</div>
+                    <div id="dbgPacienteDoc" class="valor">-</div>
+                </div>
+                <div class="item-dado">
+                    <div class="titulo">OM</div>
+                    <div id="dbgOMAbrDoc" class="valor">-</div>
+                </div>
+                <div class="item-dado">
+                    <div class="titulo">Data</div>
+                    <div id="dbgDataDoc" class="valor">-</div>
+                </div>
+                <div class="item-dado">
+                    <div class="titulo">Especialidade</div>
+                    <div id="dbgEspecialidadeDoc" class="valor">-</div>
+                </div>
+            </div>
+
+            <div id="painelExtraidosComissao" class="dados-extraidos-horizontal oculto">
+                <div class="item-dado">
+                    <div class="titulo">Sessão</div>
+                    <div id="dbgSessaoComissao" class="valor">-</div>
+                </div>
+                <div class="item-dado">
+                    <div class="titulo">Paciente</div>
+                    <div id="dbgPacienteComissao" class="valor">-</div>
+                </div>
+                <div class="item-dado">
+                    <div class="titulo">Data</div>
+                    <div id="dbgDataComissao" class="valor">-</div>
+                </div>
+            </div>
+        </aside>
+
+        <div class="botoesDoc">
+            <button id="gerarNomeBtn">GERAR NOME</button>
+            <button id="renomearBtn">BAIXAR PDF</button>
+        </div>
     </div>
 
-    <!-- Rodapé Fixo com Assinatura -->
-    <footer>
-        <div class="rodapeEsquerda">
-            <div class="info-versao">
-                <div class="versao">Versão SAME 1.0.0</div>
-                <div class="versaodata">Atualizado em 28/07/2026</div>
+    <div class="imagemPainelDoc"></div>
+</div>
+
+
+<!-- ============================================================
+     PÁGINA "BANCO"
+     ============================================================ -->
+<div class="pagina" id="pagina-banco">
+    <div class="container">
+        <h1>GERENCIADOR DO BANCO DE DADOS</h1>
+
+        <div class="cartao-conexao">
+            <p>Selecione a pasta no seu computador onde os dados dos pacientes serão armazenados.</p>
+            <div id="statusBanco" class="status-banco-grande">DESCONECTADO</div>
+            <button id="btnConectarBanco" class="btn-conectar-central">CONECTAR PASTA DO BANCO</button>
+
+            <!-- FUNCIONALIDADE NOVA: backup do banco em um único arquivo .json,
+                 para não depender só da pasta local (pen drive, nuvem, etc.). -->
+            <button id="btnExportarBackup" type="button">EXPORTAR BACKUP (.JSON)</button>
+            <button id="btnImportarBackup" type="button">IMPORTAR BACKUP (.JSON)</button>
+            <input type="file" id="inputImportarBackup" accept=".json">
+        </div>
+
+        <!-- FUNCIONALIDADE NOVA: resumo do banco conectado (total de
+             pacientes, OMs e especialidades mais frequentes). Some quando
+             não há pacientes e reaparece sozinho ao conectar/atualizar. -->
+        <div id="estatisticasBanco" class="info-banco oculto">
+            <p><strong>Total de pacientes cadastrados:</strong> <span id="statTotalPacientes">0</span></p>
+            <p><strong>OMs mais frequentes:</strong> <span id="statTopOMs">-</span></p>
+            <p><strong>Especialidades mais frequentes:</strong> <span id="statTopEspecialidades">-</span></p>
+        </div>
+
+        <div class="info-banco">
+            <p><strong>Atenção:</strong> O navegador solicita permissão toda vez que o sistema é recarregado por questões de segurança.</p>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     RODAPÉ FIXO
+     ============================================================ -->
+<footer id="footerSistema">
+    <div class="rodapeEsquerda">
+        <div class="info-versao">
+            <div class="versao">Versão 1.4.5</div>
+            <div class="versaodata">Última Atualização 10/08/2026</div>
+        </div>
+    </div>
+
+    <div class="rodapeCentro">
+        <button id="toggleAbas" class="toggleAbas" aria-label="Recolher ou expandir menu de páginas">▼</button>
+        <div id="conteudoAbas">
+            <button class="aba ativa" data-aba="lme">LME</button>
+            <button class="aba" data-aba="doc">DOC</button>
+            <button class="aba" data-aba="excel">EXCEL</button>
+            <button class="aba" data-aba="banco">BANCO</button>
+        </div>
+    </div>
+
+    <div class="rodapeDireita">
+        <div class="assinatura">
+            <div class="autor">Developed by: CB HOSTYN</div>
+            <div class="frase">"O fogo que corrói os mais fracos, é o mesmo que forja os mais fortes"</div>
+            <div class="turma">CFC 25</div>
+        </div>
+    </div>
+</footer>
+
+<!-- ============================================================
+     MODAIS PADRONIZADOS DO SISTEMA (DUPLICIDADE E EXCLUSÃO)
+     ============================================================ -->
+<div id="modalDuplicidade" class="modal-overlay oculto">
+    <div class="modal-container">
+        <div class="modal-cabecalho">
+            PACIENTE JÁ CADASTRADO NO BANCO DE DADOS
+        </div>
+
+        <p class="modal-mensagem">Já existe um registro salvo com este mesmo nome. Compare os dados antes de prosseguir:</p>
+
+        <div class="modal-comparacao">
+            <div class="card-comparacao">
+                <div class="titulo-card-modal">DADOS EXISTENTES NO BANCO</div>
+                <div class="campo-comparativo"><span>Paciente:</span> <strong id="compExistentePaciente">-</strong></div>
+                <div class="campo-comparativo"><span>OM:</span> <strong id="compExistenteOM">-</strong></div>
+                <div class="campo-comparativo"><span>Data:</span> <strong id="compExistenteData">-</strong></div>
+                <div class="campo-comparativo"><span>Especialidade:</span> <strong id="compExistenteEspecialidade">-</strong></div>
+                <div class="campo-comparativo"><span>Médico:</span> <strong id="compExistenteMedico">-</strong></div>
+            </div>
+
+            <div class="card-comparacao">
+                <div class="titulo-card-modal">NOVOS DADOS A SEREM SALVOS</div>
+                <div class="campo-comparativo"><span>Paciente:</span> <strong id="compNovoPaciente">-</strong></div>
+                <div class="campo-comparativo"><span>OM:</span> <strong id="compNovoOM">-</strong></div>
+                <div class="campo-comparativo"><span>Data:</span> <strong id="compNovoData">-</strong></div>
+                <div class="campo-comparativo"><span>Especialidade:</span> <strong id="compNovoEspecialidade">-</strong></div>
+                <div class="campo-comparativo"><span>Médico:</span> <strong id="compNovoMedico">-</strong></div>
             </div>
         </div>
 
-        <div class="rodapeDireita">
-            <div class="assinatura">
-                <div class="autor">Developed by: CB HOSTYN</div>
-                <div class="frase">"O fogo que corrói os mais fracos, é o mesmo que forja os mais fortes"</div>
-                <div class="turma">CFC 25</div>
-            </div>
+        <div class="modal-rodape">
+            <button type="button" id="btnModalSubstituir" class="btn-modal">SUBSTITUIR (SOBRESCREVER)</button>
+            <button type="button" id="btnModalSalvarAmbos" class="btn-modal">SALVAR AMBOS</button>
+            <button type="button" id="btnModalCancelar" class="btn-modal">CANCELAR / VOLTAR</button>
         </div>
-    </footer>
+    </div>
+</div>
 
-    <!-- Arquivos de dados -->
-    <script src="dados/medicos.js"></script>
-    <script src="dados/especialidades.js"></script>
+<div id="modalExcluir" class="modal-overlay oculto">
+    <div class="modal-container modal-container-pequeno">
+        <div class="modal-cabecalho">
+            CONFIRMAR EXCLUSÃO DE REGISTRO
+        </div>
 
-    <!-- Script principal -->
-    <script src="script.js"></script>
+        <p class="modal-mensagem">Tem certeza que deseja EXCLUIR PERMANENTEMENTE o registro abaixo do banco local?</p>
+
+        <div class="card-comparacao">
+            <div class="campo-comparativo"><span>Paciente:</span> <strong id="excluirNomePaciente">-</strong></div>
+            <div class="campo-comparativo"><span>OM:</span> <strong id="excluirOMPaciente">-</strong></div>
+            <div class="campo-comparativo"><span>Data:</span> <strong id="excluirDataPaciente">-</strong></div>
+        </div>
+
+        <div class="modal-rodape">
+            <button type="button" id="btnModalConfirmarExclusao" class="btn-modal">SIM, EXCLUIR REGISTRO</button>
+            <button type="button" id="btnModalCancelarExclusao" class="btn-modal">CANCELAR / VOLTAR</button>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     LÓGICA DO SISTEMA (script.js) — comentada por módulos.
+     Carregado como <script> comum (sem type="module") de propósito:
+     assim o sistema continua funcionando ao abrir o arquivo HTML
+     diretamente do disco (duplo clique), sem precisar de um servidor
+     local — módulos ES (type="module") são bloqueados pelo navegador
+     nesse cenário.
+     ============================================================ -->
+<script src="script.js"></script>
+
 </body>
 </html>

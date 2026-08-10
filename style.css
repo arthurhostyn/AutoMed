@@ -1,101 +1,120 @@
 /* ============================================================
-   AUTOMED - FOLHA DE ESTILOS (SISTEMA VISÍVEL)
+   AUTOMED - FOLHA DE ESTILOS (style.css)
+   ------------------------------------------------------------
+   ÍNDICE DE MÓDULOS:
+    1. Reset e configuração base
+    2. Container principal, marca d'água e layout geral
+    3. Cabeçalho (título, versão, assinatura)
+    4. Dropzones e botões de recolher
+    5. Cards de dados extraídos
+    6. Campos de texto e controles (textarea, botão, select)
+    7. Sistema de abas/páginas e transições
+    8. Rodapé fixo
+    9. Banco de dados local (barra superior e página BANCO)
+   10. Mensagens flutuantes (toasts)
+   11. Modais padronizados (duplicidade e exclusão)
    ============================================================ */
 
-/* MÓDULO 1: RESET E CONFIGURAÇÃO BASE */
+
+/* ============================================================
+   MÓDULO 1 — RESET E CONFIGURAÇÃO BASE
+   O que este arquivo faz: zera os estilos padrão do navegador e
+   define o comportamento visual básico de toda a página (fundo,
+   fonte, zoom geral e o efeito de "não piscar" ao carregar).
+   ============================================================ */
+
+/* Mantém sempre a barra de rolagem vertical reservada (mesmo em
+   páginas sem rolagem). Isso evita que o conteúdo "pule" alguns
+   pixels para o lado quando uma página passa a ter rolagem. */
+html {
+    overflow-y: scroll;         /* sempre mostra a faixa de rolagem vertical */
+    scrollbar-gutter: stable;   /* reserva o espaço da barra mesmo sem rolagem */
+}
+
+/* Reset universal: remove margens/paddings padrão do navegador e
+   força todos os elementos a usarem a mesma fonte. */
 * {
     margin: 0;
     padding: 0;
-    box-sizing: border-box;
-    font-family: Arial, Helvetica, sans-serif;
+    box-sizing: border-box;                     /* padding/border não aumentam o tamanho final do elemento */
+    font-family: Arial, Helvetica, sans-serif;   /* fonte única em todo o sistema */
 }
 
 body {
-    background: #4b5320;
-    color: white;
-    padding: 65px;
-    zoom: 0.72;
+    background: #4b5320;   /* verde militar de fundo */
+    color: white;           /* texto branco por padrão */
+    padding: 65px;          /* respiro entre o conteúdo e a borda da janela */
+    zoom: 0.71;              /* reduz a escala geral da página (suportado em Chrome/Edge) */
+    opacity: 0;                       /* começa invisível... */
+    transition: opacity 0.15s ease;   /* ...e aparece suavemente quando o JS libera (ver MÓDULO 16, no final do script.js) */
+    overflow-x: hidden;      /* nunca mostra rolagem horizontal */
 }
 
-/* MÓDULO 2: CONTAINER PRINCIPAL E MARCA D'ÁGUA (BRASÃO) */
+/* Classe adicionada via JavaScript quando a página termina de montar.
+   É o que dispara a transição de opacidade acima (efeito "anti-flicker"). */
+body.carregado {
+    opacity: 1;
+}
+
+/* ------------------------------------------------------------
+   NOTA DE REVISÃO (compatibilidade):
+   A propriedade "zoom" não é um padrão CSS oficial e não funciona
+   no Firefox (funciona em Chrome, Edge e navegadores baseados em
+   Chromium). Se o sistema também precisar rodar no Firefox, o
+   substituto correto seria "transform: scale()" em um container
+   dedicado — porém essa troca exige testar novamente o rodapé fixo
+   (position: fixed se comporta diferente dentro de um elemento com
+   transform). Por segurança, a técnica atual foi mantida como está.
+   ------------------------------------------------------------ */
+/* ============================================================
+   MÓDULO 2 — CONTAINER PRINCIPAL, MARCA D'ÁGUA E LAYOUT GERAL
+   O que este arquivo faz: centraliza o conteúdo de cada página,
+   desenha o brasão semitransparente de fundo e organiza o layout
+   de duas colunas (painel de dados + área principal) usado na
+   página LME.
+   ============================================================ */
+
 .container {
-    max-width: 1100px;
-    margin: auto;
-    margin-top: -50px;
-    position: relative;
+    max-width: 1100px;     /* largura máxima do conteúdo, mesmo em telas grandes */
+    margin: auto;            /* centraliza horizontalmente */
+    margin-top: -50px;      /* ajuste fino para compensar o padding do body */
+    position: relative;      /* cria contexto de posicionamento para o brasão (::before) */
+    z-index: 2;               /* garante que o conteúdo fique acima da marca d'água */
 }
 
+/* Pseudo-elemento usado como "papel de parede" do brasão dentro do
+   container. Fica atrás de tudo (z-index -1) e não recebe cliques. */
 .container::before {
     content: "";
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    top: 0; left: 0; right: 0; bottom: 0;   /* ocupa o container inteiro */
+
     background-image: url("Imagens Dentro do Lodout/Brasão.png");
     background-repeat: no-repeat;
     background-position: center -20px;
     background-size: 620px;
-    opacity: 0.25;
-    pointer-events: none;
+    opacity: 0.25;            /* efeito de marca d'água (bem apagado) */
+
+    pointer-events: none;    /* clique "atravessa" o brasão, não atrapalha os botões */
     z-index: -1;
 }
 
-/* MÓDULO 3: CABEÇALHO E TÍTULOS */
-h1 {
-    text-align: center;
-    margin-bottom: 20px;
-    border: 2px solid #a3b18a;
-    padding: 10px;
-    font-size: 35px;
-    background: transparent;
-}
-
-h2 {
-    margin-bottom: 10px;
-    font-size: 20px;
-}
-
-/* MÓDULO 4: DROPZONE (ÁREA DE ARRASTAR/SOLTAR PDF) */
-#dropZone {
-    border: 3px dashed #c7d59f;
-    padding: 20px;
-    text-align: center;
-    cursor: pointer;
-    margin-bottom: 20px;
-    font-size: 18px;
-    position: relative;
-    background: rgba(0, 0, 0, 0.15);
-}
-
-#dropZone.hover,
-#dropZone:hover {
-    background: #606c3870;
-}
-
-.nomeArquivo {
-    font-size: 14px;
-    color: #c7d59f;
-    margin-top: 8px;
-    font-weight: bold;
-}
-
-#pdfFile {
-    display: none;
-}
-
-/* MÓDULO 5: LAYOUT PRINCIPAL */
+/* Layout principal da página LME: painel lateral esquerdo (dados
+   extraídos) + área principal (modelo de texto e resultado). */
 .conteudo-principal {
     display: flex;
-    gap: 20px;
-    align-items: flex-start;
+    gap: 20px;                 /* espaço entre as duas colunas */
+    align-items: flex-start;   /* cada coluna cresce independente da altura da outra */
 }
 
+/* Coluna esquerda: painel fixo de largura definida com os cards
+   "Dados Extraídos". */
 .painel-extraidos {
     width: 300px;
-    position: relative; /* Mantém o painel fixo no topo da página sem acompanhar a rolagem do mouse */
+    position: sticky;   /* acompanha a rolagem da página */
 }
 
+/* Coluna direita: ocupa todo o espaço restante. */
 .area-principal {
     flex: 1;
 }
@@ -104,7 +123,348 @@ h2 {
     margin-top: 0px;
 }
 
-/* MÓDULO 6: CARDS DE DADOS EXTRAÍDOS */
+/* ============================================================
+   IMAGENS DECORATIVAS DOS PAINÉIS (fundo dos cards e da página DOC)
+   ============================================================ */
+
+.imagemPainel {
+    width: 222px;
+    height: 222px;
+    margin-top: -15px;
+    margin-left: 40px;
+    margin-right: auto;
+    background-image: url("Imagens Dentro do Lodout/QmSaude.jpg");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    opacity: 0.85;
+    pointer-events: none;   /* decorativo: não deve interceptar cliques */
+}
+
+.imagemPainelDoc {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image: url("Imagens Dentro do Lodout/CFC25.png");
+    background-repeat: no-repeat;
+    background-position: center 535px;   /* posição calibrada manualmente, não alterar */
+    background-size: 600px;
+    opacity: 0.65;
+    pointer-events: none;
+    z-index: 1;   /* acima do fundo verde, porém abaixo dos botões da página */
+}
+/* ============================================================
+   MÓDULO 3 — CABEÇALHO (títulos, versão e assinatura)
+   O que este arquivo faz: estiliza os títulos de cada página e a
+   faixa superior com a versão do sistema e a assinatura do autor.
+   ============================================================ */
+
+h1 {
+    text-align: center;
+    margin-bottom: 20px;
+    border: 2px solid #a3b18a;
+    padding: 10px;
+    font-size: 35px;
+}
+
+h2 {
+    margin-bottom: 10px;
+}
+
+h3 {
+    text-align: center;
+    margin-bottom: 10px;
+    border: 2px solid #a3b18a;
+    padding: 10px;
+    font-size: 35px;
+}
+
+/* Linha com a versão (esquerda) e a assinatura (direita), acima do título. */
+.cabecalho {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-top: -55px;
+    margin-bottom: 30px;
+}
+
+.info-versao {
+    display: flex;
+    flex-direction: column;
+}
+
+.assinatura {
+    top: -17px;
+    right: 20px;
+    text-align: right;
+    z-index: 1000;
+    line-height: 1.1;
+}
+
+.assinatura .autor {
+    font-size: 14px;
+    font-weight: bold;
+    color: #c7d59f;
+    text-shadow: 0 0 4px rgba(0, 0, 0, .5);
+}
+
+.assinatura .frase {
+    font-size: 11px;
+    font-style: italic;
+    color: #ffffff;
+    opacity: 0.9;
+    max-width: 240px;
+    line-height: 1.2;
+}
+
+.assinatura .turma {
+    font-size: 11px;
+    color: #c7d59f;
+    font-weight: bold;
+}
+
+.versao,
+.versaodata {
+    top: -17px;
+    font-size: 13px;
+    font-style: italic;
+    color: #c7d59f;
+}
+/* ============================================================
+   MÓDULO 4 — DROPZONES (áreas de arrastar/soltar PDF) E RECOLHER
+   O que este arquivo faz: estiliza as caixas de anexar PDF, a barra
+   que permite recolher/expandir esse bloco, e o estado "hover"
+   quando um arquivo é arrastado por cima.
+   ============================================================ */
+
+.area-dropzones {
+    margin-bottom: 20px;
+    transition: margin-bottom 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ------------------------------------------------------------
+   LINHA DA BARRA: duas caixas INDEPENDENTES lado a lado — a barra
+   "ANEXAR PDF'S" (larga) e o botão "LIMPAR" (estreito), separadas por
+   um vão real onde aparece o fundo da página.
+
+   É o mesmo padrão que o sistema já usa para botões independentes em
+   sequência (".botoesDoc", "#conteudoAbas/.aba" e o par EXCLUIR/SALVAR
+   da barra do banco): caixas preenchidas, sem borda, separadas por um
+   vão — a separação vem do vão, não de uma borda desenhada.
+
+   Esta linha tem SEMPRE a largura total do container: é ela que serve
+   de régua fixa para centralizar o rótulo (ver .label-dropzone). ---- */
+.linha-barra-dropzone {
+    display: flex;
+    align-items: stretch;   /* iguala a altura das duas caixas automaticamente */
+    position: relative;      /* régua fixa do rótulo centralizado, abaixo */
+    margin-bottom: 10px;
+    transition: margin-bottom 0.35s ease;
+}
+
+.area-dropzones.recolhido .linha-barra-dropzone {
+    margin-bottom: 0px;
+}
+
+/* Barra clicável com o rótulo "ANEXAR PDF'S" e a seta de recolher.
+
+   REVISÃO: a versão original usava "padding: 8px 481px" para
+   empurrar o texto e o botão para o centro da barra. Esse valor é
+   um número "mágico" calculado para a largura exata de 1100px do
+   container — em qualquer largura diferente ele quebra o alinhamento
+   ou estoura a barra. Trocado por posicionamento independente: o
+   rótulo se centraliza sozinho e a seta fica presa à direita com
+   "margin-left:auto" — nenhum dos dois depende de medir a tela. */
+.barra-dropzone-header {
+    flex: 1;   /* ocupa tudo o que sobra — cresce quando o LIMPAR encolhe */
+    display: flex;
+    align-items: center;
+    background: #283618;
+    color: white;
+    padding: 8px 15px;          /* antes: 8px 481px (hack de centralização) */
+    border: none;
+    border-radius: 0;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s ease;
+}
+
+.barra-dropzone-header:hover {
+    background: #1d2911;
+}
+
+/* Rótulo "ANEXAR PDF'S": NUNCA se move. Ele se ancora na linha inteira
+   (".linha-barra-dropzone", de largura fixa), e não na barra — que muda
+   de largura ao recolher. Assim ele fica no mesmo ponto nos dois
+   estados, alinhado com o título da página e com o campo "Pesquisar
+   Paciente…", que também se centralizam nessa mesma largura. */
+.label-dropzone {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;   /* decorativo — quem recebe o clique é a própria barra */
+}
+
+/* Seta de recolher/expandir: botão simples preso à direita da barra.
+   Fundo transparente (a barra por trás já é #283618) e escurece no
+   hover, seguindo o padrão dos demais botões do sistema. */
+.toggleDropzone {
+    margin: 0 0 0 auto;   /* "auto" à esquerda = colado na borda direita da barra */
+    padding: 0;
+    width: 32px;
+    height: 30px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease;
+}
+
+/* REVISÃO (bug): o giro de 180° já esteve aplicado no BOTÃO inteiro.
+   Como o botão pode variar de tamanho, girar a caixa inteira fazia o
+   giro "varrer" a vizinhança, parecendo que outros elementos giravam
+   junto. A seta é um elemento próprio, do tamanho do ícone, e só ELA
+   gira — a caixa por trás permanece parada. */
+.icone-toggle-dropzone {
+    display: inline-block;
+    font-size: 14px;
+    transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.27);
+    transform: rotate(0deg);
+}
+
+.area-dropzones.recolhido .icone-toggle-dropzone {
+    transform: rotate(-180deg);
+}
+
+/* Botão "LIMPAR": caixa própria, irmã da barra — mesmo preenchimento e
+   mesmo hover dos outros botões do sistema (SALVAR, EXCLUIR, abas).
+
+   O recuo entre as duas caixas é um "margin-left" no LIMPAR, e não um
+   "gap" na linha: o gap continuaria reservando espaço mesmo com o
+   LIMPAR em largura 0, impedindo a barra de encostar na borda direita
+   quando recolhida. */
+.btn-limpar-dropzone {
+    flex: 0 0 auto;
+    width: 110px;
+    margin: 0 0 0 10px;   /* o recuo visível entre as duas caixas */
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: #283618;
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    overflow: hidden;
+    white-space: nowrap;
+    opacity: 1;
+    transition: background-color 0.2s ease,
+                width 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+                margin-left 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 0.5s ease;
+}
+
+.btn-limpar-dropzone:hover {
+    background: #1d2911;
+}
+
+.toggleDropzone:focus-visible,
+.btn-limpar-dropzone:focus-visible {
+    outline: 2px solid #ffffff;
+    outline-offset: -2px;
+}
+
+/* Estado recolhido: o LIMPAR encolhe até zero (largura, recuo e
+   opacidade) e a barra — sendo "flex:1" — cresce em tempo real
+   ocupando exatamente o espaço liberado, sem deixar vão sobrando. */
+.area-dropzones.recolhido .btn-limpar-dropzone {
+    width: 0;
+    margin-left: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Conteúdo recolhível: a altura vai de 250px até 0 suavemente. */
+.conteudo-dropzones {
+    max-height: 250px;
+    opacity: 1;
+    overflow: hidden;
+    transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.25s ease-in-out;
+}
+
+/* Remove a margem do último item interno para não duplicar espaçamento. */
+.conteudo-dropzones > div:last-child {
+    margin-bottom: 0 !important;
+}
+
+/* Estado "recolhido": zera a altura visível e desliga cliques dentro dele. */
+.area-dropzones.recolhido .conteudo-dropzones {
+    max-height: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none;
+}
+
+/* ------------------------------------------------------------
+   REVISÃO: a folha original repetia a mesma lista de 6 a 8 IDs em
+   três regras diferentes (estilo base, estado ":hover" e o
+   "display:none" dos inputs de arquivo). Isso é frágil: toda nova
+   dropzone precisa lembrar de entrar manualmente nas três listas,
+   senão fica sem estilo. A classe ".dropZoneDoc" já existia no HTML
+   em 6 das 8 dropzones mas não tinha nenhuma regra CSS associada
+   (ou seja, estava "morta"). Agora ela é a única fonte de estilo:
+   toda dropzone recebe essa classe no HTML e este bloco cuida de
+   todas de uma vez.
+   ------------------------------------------------------------ */
+.dropZoneDoc {
+    border: 3px dashed #c7d59f;
+    padding: 10px;
+    text-align: center;
+    cursor: pointer;
+    margin-bottom: 20px;
+    font-size: 18px;
+    position: relative;
+}
+
+.dropZoneDoc.hover,
+.dropZoneDoc:hover,
+.dropZoneDoc:focus-visible {
+    background: #606c3870;
+}
+
+/* Anel de foco visível para quem navega só com o teclado (Tab / Enter),
+   já que agora as dropzones são focáveis — ver comentário no JS
+   (MÓDULO 9 do script.js) sobre acessibilidade por teclado. */
+.dropZoneDoc:focus-visible {
+    outline: 3px solid #ffffff;
+    outline-offset: -3px;
+}
+
+/* Variante maior, usada apenas na dropzone da Comissão de Ética. */
+#dropZoneComissaoEtica {
+    padding: 70.5px;
+    font-size: 28px;
+}
+
+/* Todo input de arquivo do sistema é usado apenas como "gatilho"
+   escondido atrás de uma dropzone — por isso um único seletor por
+   atributo substitui a lista de 8 IDs que existia antes. */
+input[type="file"] {
+    display: none;
+}
+/* ============================================================
+   MÓDULO 5 — CARDS DE DADOS EXTRAÍDOS
+   O que este arquivo faz: estiliza os pequenos cartões que mostram
+   os dados lidos do PDF (Paciente, Médico, Data, etc.).
+   ============================================================ */
+
 .dados-extraidos {
     display: flex;
     flex-direction: column;
@@ -123,49 +483,64 @@ h2 {
     font-weight: bold;
     font-size: 12px;
     color: #283618;
-    text-transform: uppercase;
 }
 
 .valor {
     font-size: 14px;
     margin-top: 3px;
-    word-break: break-word;
 }
 
-/* MÓDULO 7: IMAGENS DECORATIVAS DO PAINEL */
-.imagemPainel {
-    width: 222px;
-    height: 222px;
-    margin-top: 15px;
-    margin-left: auto;
-    margin-right: auto;
-    background-image: url("Imagens Dentro do Lodout/QmSaude.jpg");
-    background-repeat: no-repeat;
-    background-position: center;
-    background-size: contain;
-    opacity: 0.85;
-    pointer-events: none;
+.painel-extraidospag1 {
+    margin-top: 20px;
 }
 
-/* MÓDULO 8: CAMPOS DE TEXTO E CONTROLES */
-.modeloTexto {
-    display: none;
-}
-
-textarea {
+/* Variante em linha, usada na página "Renomeador de Documentos". */
+.dados-extraidos-horizontal {
+    display: flex;
+    flex-direction: row !important;
+    gap: 10px;
     width: 100%;
+}
+
+.dados-extraidos-horizontal .item-dado {
+    flex: 1;
+    min-width: 244px;
+}
+/* ============================================================
+   MÓDULO 6 — CAMPOS DE TEXTO E CONTROLES (textarea, botão, select)
+   O que este arquivo faz: estiliza os campos editáveis de modelo de
+   texto, os botões/selects padrão do sistema e os campos de
+   resultado (nome de arquivo gerado, linha do Excel).
+   ============================================================ */
+
+.modeloTexto {
+    display: none;   /* só o modelo escolhido no select fica visível (ver MÓDULO 11 do script.js) */
+}
+
+textarea,
+.area-editable {
+    width: 100%;
+    height: 280px;        /* altura fixa, igual para todos os modelos */
     min-height: 280px;
+    max-height: 280px;
     background: #f5f5f5;
     color: black;
     border: 10px solid #2f3e1d;
     padding: 12px;
-    resize: vertical;
-    font-size: 13px;
+    resize: none;          /* sem alça de redimensionar no canto */
+    overflow-y: auto;      /* texto muito longo ganha barra de rolagem interna */
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 14px;
+    outline: none;
     line-height: 1.4;
 }
 
-#resultado {
-    min-height: 280px;
+.area-editable b,
+.area-editable strong {
+    font-weight: bold;
+    color: #000;
 }
 
 button,
@@ -182,54 +557,180 @@ select {
     font-size: 14px;
 }
 
-#modeloSelect {
-    width: 100%;
-}
-
 button:hover,
 select:hover {
     background: #1d2911;
 }
 
-/* CONTROLES DE GERAÇÃO (PRONOME, SENHA E BOTÃO) */
-.controles-geracao {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    margin-top: 10px;
-    margin-bottom: 15px;
+#tipodocumento {
+    margin-top: 1px;
+    margin-bottom: 10px;
+    padding: 12px 12px;
+    border: none;
+    border-radius: 0;
+    background: #283618;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 14px;
+    text-align: center;
 }
 
-.controles-geracao select {
-    margin: 0;
-    width: 30%;
-    height: 48px;
+#tipodocumento:hover {
+    background: #1d2911;
 }
 
-.controles-geracao input[type="text"] {
-    margin: 0;
-    height: 48px;
-    width: 35%;
+#nomeArquivoGerado,
+#resultadoExcel {
+    width: 100%;
+    height: 50px;
+    padding: 10px;
     border: 10px solid #2f3e1d;
     background: #f5f5f5;
     color: black;
+    margin-bottom: 10px;
     font-weight: bold;
-    padding: 0 10px;
     font-size: 14px;
 }
 
-.controles-geracao button {
-    margin: 0;
-    height: 48px;
-    flex: 1;
+.botoesDoc {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
 }
 
-#copiarBtn {
-    width: 100%;
-    margin-top: 10px;
+/* Página Excel: força altura mínima do container para o brasão
+   aparecer inteiro e reserva espaço para não encostar no rodapé. */
+#pagina-excel .container {
+    min-height: 700px !important;
+    padding-bottom: 120px !important;
 }
 
-/* MÓDULO 10: RODAPÉ FIXO E ASSINATURA */
+#pagina-excel #resultadoExcel {
+    margin-bottom: 0;
+}
+
+#pagina-excel .botoesDoc {
+    margin-top: 0;
+}
+
+#pagina-excel #copiarExcelBtn {
+    margin-top: 15px;
+}
+
+/* ============================================================
+   SELECT "CONFERÊNCIA / LAUDO" — aparece e desaparece com uma
+   transição de esmaecimento, igual ao botão do rodapé.
+   ============================================================ */
+#tipoLaudoConferenciaSelect {
+    display: inline-block;
+    vertical-align: middle;
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0) scale(1);
+    transform-origin: left center;   /* a animação nasce a partir da esquerda */
+    max-width: 220px;
+    overflow: hidden;
+    pointer-events: auto;
+    transition: opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+                max-width 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+                margin 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+                padding 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+                visibility 0.25s;
+}
+
+#tipoLaudoConferenciaSelect.oculto-select {
+    opacity: 0;
+    visibility: hidden;
+    max-width: 0;
+    padding-left: 0;
+    padding-right: 0;
+    margin-left: 0;
+    margin-right: 0;
+    border-width: 0;
+    pointer-events: none;
+}
+/* ============================================================
+   MÓDULO 7 — SISTEMA DE ABAS/PÁGINAS E TRANSIÇÕES ENTRE ELAS
+   O que este arquivo faz: controla qual "página" (LME, DOC, EXCEL,
+   BANCO) fica visível e a animação de deslizar ao trocar de aba.
+   ============================================================ */
+
+.pagina {
+    display: none;         /* toda página começa escondida... */
+    position: relative;    /* ...e prende elementos absolutos (ex.: brasão da DOC) dentro dela */
+}
+
+.pagina.ativa {
+    display: block;        /* ...até o JS marcar a página atual como ativa */
+}
+
+#pagina-doc {
+    position: relative;
+    min-height: 1100px !important;      /* expande a página para mostrar o brasão inteiro */
+    padding-bottom: 460px !important;   /* garante espaço para a base do brasão */
+}
+
+/* Na página DOC o painel de cards precisa ocupar a largura toda
+   (sem isso os cards ficam espremidos/cortados, pois herdariam a
+   largura fixa de 300px usada na página LME). */
+#pagina-doc .painel-extraidos {
+    width: 100% !important;
+    position: static !important;
+}
+
+.painelAbas {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    margin-bottom: 10px;
+}
+
+.oculto {
+    display: none !important;
+}
+
+/* Some suavemente ao trocar entre os modos "LME SCAN" e "COMISSÃO
+   DE ÉTICA" dentro da página DOC. */
+#blocoLmeScan:not(.oculto),
+#blocoComissaoEtica:not(.oculto),
+#painelExtraidosLmeScan:not(.oculto),
+#painelExtraidosComissao:not(.oculto),
+#inputPesquisaDoc:not(.oculto) {
+    animation: surgirDocSuave 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes surgirDocSuave {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Anima a página que entra: da direita quando avança, da esquerda
+   quando volta (classes aplicadas dinamicamente pelo JS de navegação). */
+.pagina.slide-direita {
+    animation: slideDaDireita 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.pagina.slide-esquerda {
+    animation: slideDaEsquerda 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideDaDireita {
+    from { opacity: 0; transform: translateX(45px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideDaEsquerda {
+    from { opacity: 0; transform: translateX(-45px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+/* ============================================================
+   MÓDULO 8 — RODAPÉ FIXO (menu de navegação entre páginas)
+   O que este arquivo faz: fixa o rodapé na base da tela e controla
+   a animação de recolher/expandir o menu de abas.
+   ============================================================ */
+
 footer {
     position: fixed;
     bottom: 0;
@@ -238,10 +739,33 @@ footer {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 50px;
+    padding: 1px 50px;
+    z-index: 1000;
+}
+
+/* Fundo do rodapé, separado em ::after para poder deslizar sozinho
+   quando o rodapé é recolhido. */
+footer::after {
+    content: "";
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
     background: #4b5320;
     border-top: 2px solid #606c38;
-    z-index: 0;
+    z-index: -1;
+    transition: transform 1s cubic-bezier(0.16, 1, 0.3, 1);
+    transform: translateY(0);
+}
+
+.rodapeEsquerda,
+.rodapeDireita,
+#conteudoAbas {
+    transition: transform 1s cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 1s cubic-bezier(0.16, 1, 0.3, 1),
+                visibility 1s;
+    opacity: 1;
+    transform: translateY(0);
 }
 
 .rodapeEsquerda {
@@ -249,83 +773,474 @@ footer {
     align-items: center;
 }
 
+.rodapeCentro {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: relative;
+}
+
 .rodapeDireita {
     display: flex;
     align-items: center;
 }
 
-.info-versao {
+.toggleAbas {
+    height: 35px;
+    margin: 0;
+    padding: 5px;
+    border-radius: 0px;
+    z-index: 10;
+    position: relative;
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                background-color 0.2s ease;
+    transform: translateY(0) rotate(0deg) scale(1);
+    opacity: 1;
+}
+
+footer.recolhido #toggleAbas.toggleAbas:hover {
+    background: #1d2911;
+}
+
+#conteudoAbas {
+    display: flex;
+    gap: 5px;
+}
+
+#conteudoAbas .aba {
+    background: #283618;
+    color: white;
+    padding: 12px 25px;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+#conteudoAbas .aba:hover {
+    background: #606c38;
+}
+
+#conteudoAbas .ativa {
+    background: #c7d59f;
+    color: #283618;
+}
+
+/* Estado recolhido: fundo, esquerda, direita e abas descem exatamente
+   os mesmos 120px, todos juntos. */
+footer.recolhido::after,
+footer.recolhido .rodapeEsquerda,
+footer.recolhido .rodapeDireita,
+footer.recolhido #conteudoAbas {
+    transform: translateY(120px) !important;
+}
+
+footer.recolhido .rodapeEsquerda,
+footer.recolhido .rodapeDireita,
+footer.recolhido #conteudoAbas {
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Área "fantasma" que continua recebendo clique/hover perto da borda
+   inferior, para o rodapé reaparecer ao passar o mouse ali. */
+footer.recolhido::before {
+    content: "";
+    position: absolute;
+    bottom: 0; left: 0;
+    width: 100%;
+    height: 200px;
+    pointer-events: auto;
+    background: transparent;
+    z-index: 1;
+}
+
+footer.recolhido #toggleAbas {
+    opacity: 0;
+    transform: translateY(18px) rotate(-180deg) scale(0.9);
+    background: #283618;
+    pointer-events: auto;
+}
+
+footer.recolhido:hover #toggleAbas,
+footer.recolhido #toggleAbas:hover {
+    opacity: 1;
+    transform: translateY(0) rotate(-180deg) scale(1);
+}
+/* ============================================================
+   MÓDULO 9 — BANCO DE DADOS LOCAL (barra superior e página BANCO)
+   O que este arquivo faz: estiliza a barra de busca/salvar/excluir
+   paciente (topo das páginas LME, EXCEL e DOC) e a página de
+   conexão com a pasta do banco de dados.
+
+   REVISÃO: no arquivo original existiam três classes diferentes
+   (".btn-conexao", ".btn-banco-topo", ".btn-salvar-topo") com
+   exatamente as mesmas 9 propriedades repetidas — e ".btn-conexao"
+   nunca chegou a ser usada em nenhum HTML nem JS (código morto).
+   Aqui elas viram uma única regra. O HTML foi simplificado para usar
+   somente "btn-banco-topo" nesses botões; o resultado visual é
+   idêntico ao original.
+   ============================================================ */
+
+.barra-banco-superior {
+    border: 3px dashed #c7d59f;
+    padding: 10px 15px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    border-radius: 0;
+    min-height: 67px;
+}
+
+.sessao-conexao {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    z-index: 2;
+}
+
+.grupo-banco-acoes-topo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    justify-content: flex-end;
+}
+
+.grupo-select-central {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.select-banco-topo {
+    width: 800px;
+    min-width: 800px;
+    max-width: 800px;
+    height: 45px;
+    padding: 0 15px;
+    border: 10px solid #2f3e1d;
+    border-radius: 0;
+    background: white;
+    color: black;
+    font-weight: bold;
+    font-size: 14px;
+    cursor: pointer;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    appearance: none;
+}
+
+#pagina-excel .select-banco-topo {
+    width: 1020px;
+    min-width: 1020px;
+    max-width: 1020px;
+}
+
+/* Botões de ação da barra superior (Conectar / Salvar / Excluir). */
+.btn-banco-topo {
+    margin-top: 1px;
+    margin-bottom: 1px;
+    padding: 12px 25px;
+    border: none;
+    border-radius: 0;
+    background: #283618;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.btn-banco-topo:hover {
+    background: #1d2911;
+}
+
+/* PÁGINA "GERENCIADOR DO BANCO DE DADOS" */
+#pagina-banco .container {
+    display: block;
+    text-align: center;
+}
+
+.conteudo-central-banco {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: auto;
+    padding-top: 20px;
+    width: 100%;
+}
+
+.cartao-conexao {
+    border: 3px dashed #c7d59f;
+    background: #353d1a99;
+    padding: 50px;
+    width: 100%;
+    max-width: 650px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 0 auto;
+}
+
+.status-banco-grande {
+    display: inline-block;
+    font-size: 22px;
+    font-weight: bold;
+    color: #ff4d4d;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 15px 30px;
+    margin-bottom: 40px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.btn-conectar-central {
+    background: #283618;
+    color: white;
+    padding: 22px 45px;
+    font-size: 18px;
+    font-weight: bold;
+    border: none;
+    cursor: pointer;
+}
+
+.info-banco {
+    margin-top: 30px;
+    width: 100%;
+    max-width: 650px;
+    padding: 20px;
+    background: rgba(199, 213, 159, 0.1);
+    border-left: 4px solid #c7d59f;
+    text-align: left;
+    margin-left: auto;
+    margin-right: auto;
+}
+/* ============================================================
+   MÓDULO 10 — MENSAGENS FLUTUANTES (TOASTS)
+   O que este arquivo faz: estiliza as notificações que aparecem no
+   canto superior direito (sucesso, erro, aviso).
+   ============================================================ */
+
+#toastContainer {
+    position: fixed;
+    top: 25px;
+    right: 25px;
+    z-index: 99999;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    pointer-events: none;   /* não bloqueia cliques na página por baixo */
+}
+
+.toast {
+    background: #283618;
+    color: white;
+    padding: 14px 22px;
+    border-radius: 4px;
+    border-left: 6px solid #c7d59f;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    font-size: 14px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 280px;
+    max-width: 450px;
+    opacity: 0;
+    transform: translateX(50px) scale(0.95);
+    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: auto;
+}
+
+.toast.visivel {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+}
+
+.toast-sucesso {
+    border-left-color: #48bb78;
+    background: #1b3322;
+    color: #e6fffa;
+}
+
+.toast-erro {
+    border-left-color: #f56565;
+    background: #3c1e1e;
+    color: #fff5f5;
+}
+
+.toast-aviso {
+    border-left-color: #ed8936;
+    background: #382b19;
+    color: #fffaf0;
+}
+
+.toast-icone {
+    font-size: 18px;
+}
+/* ============================================================
+   MÓDULO 11 — MODAIS PADRONIZADOS (duplicidade e exclusão)
+   O que este arquivo faz: estiliza as janelas de confirmação usadas
+   pelo Banco de Dados local (paciente duplicado / excluir registro).
+   ============================================================ */
+
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent !important;
+    backdrop-filter: blur(6px) !important;   /* desfoca o fundo sem escurecer de preto */
+    z-index: 999999 !important;
+    pointer-events: auto;
+}
+
+.modal-overlay.oculto {
+    display: none !important;
+}
+
+.modal-container {
+    position: fixed;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    background: #4b5320;
+    outline: 8px solid #2f3e1d !important;
+    box-shadow: 0 25px 70px rgba(0, 0, 0, 0.95), 0 0 35px rgba(0, 0, 0, 0.8) !important;
+    border-radius: 0 !important;
+    width: 90%;
+    max-width: 850px;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    color: white;
+    z-index: 1000000;
+    pointer-events: auto;
+}
+
+.modal-container-pequeno {
+    max-width: 500px;
+}
+
+.modal-cabecalho {
+    border: 2px solid #a3b18a;
+    padding: 10px;
+    font-size: 18px;
+    font-weight: bold;
+    text-align: center;
+    background: #4b5320;
+    color: white;
+    border-radius: 0 !important;
+}
+
+.modal-mensagem {
+    text-align: center;
+    font-size: 14px;
+    color: #ffffff;
+    margin: 5px 0;
+}
+
+.modal-comparacao {
+    display: flex;
+    gap: 15px;
+}
+
+.card-comparacao {
+    flex: 1;
+    background: #f5f5f5;
+    color: black;
+    border: 2px solid #2f3e1d;
+    padding: 12px;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.titulo-card-modal {
+    font-size: 13px;
+    font-weight: bold;
+    color: #283618;
+    border-bottom: 2px solid #2f3e1d;
+    padding-bottom: 5px;
+    text-align: center;
+}
+
+.campo-comparativo {
+    font-size: 13px;
     display: flex;
     flex-direction: column;
 }
 
-.versao,
-.versaodata {
-    font-size: 13px;
-    font-style: italic;
-    color: #c7d59f;
+.campo-comparativo span {
+    font-size: 11px;
+    color: #283618;
+    font-weight: bold;
+    text-transform: uppercase;
 }
 
-.assinatura {
-    text-align: right;
-    line-height: 1.1;
-}
-
-.assinatura .autor {
+.campo-comparativo strong {
     font-size: 14px;
+    color: #000000;
+    word-break: break-word;
+}
+
+.modal-rodape {
+    display: flex;
+    gap: 10px;
+    margin-top: 5px;
+}
+
+.btn-modal {
+    flex: 1;
+    padding: 12px 15px;
+    border: none;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #283618;
+    color: white;
     font-weight: bold;
-    color: #c7d59f;
-    text-shadow: 0 0 4px rgba(0, 0, 0, .5);
-}
-
-.assinatura .frase {
-    font-size: 11px;
-    font-style: italic;
-    color: #ffffff;
-    opacity: 0.9;
-    max-width: 280px;
-    line-height: 1.2;
-}
-
-.assinatura .turma {
-    font-size: 11px;
-    color: #c7d59f;
-    font-weight: bold;
-}
-
-/* MÓDULO 8: CAMPOS DE TEXTO E CONTROLES */
-.modeloTexto {
-    display: none;
-}
-
-textarea,
-.caixa-resultado {
-    width: 100%;
-    min-height: 280px;
-    background: #ffffff;
-    color: black;
-    border: 10px solid #2f3e1d;
-    padding: 12px;
-    resize: vertical;
+    cursor: pointer !important;
     font-size: 13px;
-    line-height: 1.4;
-    overflow-y: auto;
-    outline: none;
-    white-space: pre-wrap; /* Garante a exibição correta de TABs e quebras de linha */
-    tab-size: 4;          /* Define o recuo visual do TAB na tela */
-    -moz-tab-size: 4;
+    text-align: center;
+    margin: 0;
+    pointer-events: auto !important;
+    user-select: none;
 }
 
-.caixa-resultado:focus {
-    border-color: #3d5025;
+.btn-modal:hover {
+    background: #1d2911;
 }
 
-/* Força a exibição visual de 1,25cm para o TAB no navegador e no Word */
-span[style*="mso-tab-count"] {
-    display: inline-block;
-    min-width: 36pt;
+
+/* ============================================================
+   FUNCIONALIDADE NOVA — BOTÃO DE FECHAR MANUAL NO TOAST
+   Um "×" discreto no canto do toast, para quem quiser dispensar o
+   aviso antes dos 3.5s automáticos (ver função mostrarToast, MÓDULO 1
+   do script.js).
+   ============================================================ */
+.toast-fechar {
+    margin-left: auto;      /* empurra o botão para a direita do toast */
+    background: transparent;
+    border: none;
+    color: inherit;
+    font-size: 18px;
+    line-height: 1;
+    padding: 0 2px;
+    cursor: pointer;
+    opacity: 0.7;
 }
 
-.caixa-resultado p {
-    margin-bottom: 8px;
+.toast-fechar:hover {
+    opacity: 1;
 }
+
