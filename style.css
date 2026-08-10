@@ -366,10 +366,23 @@ h3 {
     white-space: nowrap;
     opacity: 1;
     pointer-events: auto;
+    /* REVISÃO (o "pisca branco" ao aparecer): o texto branco "LIMPAR"
+       vinha sendo revelado JUNTO com o crescimento da largura — como o
+       texto mora dentro de uma caixa com "overflow:hidden" que muda de
+       tamanho a cada quadro, as letras (brancas, alto contraste contra
+       o fundo escuro) ficavam sendo "varridas"/recortadas repetidas
+       vezes em 350ms, e essa varredura rápida é o que o olho enxerga
+       como piscar. A correção separa as duas coisas: a LARGURA
+       continua crescendo (é o que faz a barra ao lado encolher, e
+       precisa ficar assim), mas a OPACIDADE do texto só começa a
+       animar depois que a caixa já está com ~60% do tamanho final
+       ("transition-delay" de 0.2s) — sobra pouco tempo de "varredura"
+       visível, e o texto só aparece quando a caixa já está quase
+       pronta, sem o efeito de piscar. */
     transition: background-color 0.2s ease,
                 width 0.35s cubic-bezier(0.16, 1, 0.3, 1),
                 margin-left 0.35s cubic-bezier(0.16, 1, 0.3, 1),
-                opacity 0.25s ease;
+                opacity 0.15s ease 0.2s;
 }
 
 .btn-limpar-dropzone:hover {
@@ -407,6 +420,13 @@ h3 {
     margin-left: 0;
     opacity: 0;
     pointer-events: none;
+    /* Ao recolher, o texto some ASSIM que o clique acontece (delay 0),
+       bem antes da largura terminar de encolher — evita que ele fique
+       sendo recortado/varrido durante o encolhimento também. */
+    transition: background-color 0.2s ease,
+                width 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                margin-left 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 0.1s ease 0s;
 }
 
 /* Conteúdo recolhível: a altura vai de 250px até 0 suavemente. */
