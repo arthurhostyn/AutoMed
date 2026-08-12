@@ -5,8 +5,10 @@
     1. Mensagens flutuantes (toasts)
     2. Estado global da aplicação
     3. Referências ao DOM
-    4 a 7. (movidos para logica.js — dicionários, utilitários de
-            texto, formatadores e extratores de dados do PDF)
+    4. Base de conhecimento (dicionários fixos)
+    5. Utilitários de texto
+    6. Formatadores
+    7. Extratores de dados do PDF
     8. Leitura de arquivos PDF
     9. Dropzones e botões de recolher
    10. Atualização dos painéis de dados extraídos
@@ -20,15 +22,13 @@
    18. Nova consulta (botão "LIMPAR" das dropzones, todas as páginas)
    19. Estatísticas do banco de dados
    20. Backup do banco de dados (exportar / importar)
-   21. (removido) Rascunho automático do resultado gerado
-   22. Validação de campos essenciais extraídos do PDF
-   23. Compatibilidade do navegador com o Banco de Dados local
+   21. Rascunho automático do resultado gerado
 
-   Este arquivo (e o logica.js, carregado antes dele) são carregados
-   como <script> comum (sem type="module") de propósito: assim o
-   sistema continua funcionando ao abrir o AutoMed.html direto do
-   disco (duplo clique), sem precisar de um servidor local — módulos
-   ES são bloqueados pelo navegador nesse cenário.
+   Este arquivo é carregado como um <script> comum (sem
+   type="module") de propósito: assim o sistema continua
+   funcionando ao abrir o AutoMed.html direto do disco (duplo
+   clique), sem precisar de um servidor local — módulos ES são
+   bloqueados pelo navegador nesse cenário.
    ============================================================ */
 
 /* ============================================================
@@ -204,32 +204,622 @@ const pdfExcelSolicitacao = document.getElementById("pdfExcelSolicitacao");
 // --- Página LME: select "Conferência / Laudo", usado só em alguns modelos ---
 const tipoLaudoConferenciaSelect = document.getElementById("tipoLaudoConferenciaSelect");
 /* ============================================================
-   MÓDULOS 4 a 7 — movidos para logica.js
-   Base de conhecimento (dicionários), utilitários de texto,
-   formatadores e extratores de dados do PDF: nenhum desses módulos
-   usa o DOM/navegador, então viraram um arquivo à parte (logica.js),
-   carregado antes deste no AutoMed.html, para poder ser testado com
-   Node puro (ver tests/logica.test.js). Continuam no MESMO escopo
-   global de sempre — todas as funções e dicionários de lá (ex.:
-   extrairDadosCompletos, formatarMedico, omsConhecidas) são usados
-   normalmente a partir daqui, como se estivessem neste arquivo.
-   ============================================================ */
-/* ============================================================
-   MÓDULO 8 — LEITURA DE ARQUIVOS PDF
-   O que este arquivo faz: usa a biblioteca pdf.js (hospedada
-   localmente em vendor/pdfjs, sem depender de internet) para ler um
-   arquivo PDF escolhido pelo usuário e transformar seu conteúdo em
-   texto puro, que depois é passado para os extratores do logica.js
-   (extrairDadosCompletos / extrairDadosComissaoEtica).
+   MÓDULO 4 — BASE DE CONHECIMENTO (dicionários fixos)
+   O que este arquivo faz: guarda as listas e "de-para" usados para
+   traduzir textos crus do PDF em nomes padronizados: médicos
+   conhecidos, postos militares, organizações militares (OM) e suas
+   abreviações, cargos e especialidades médicas.
+
+   Estas tabelas não têm lógica — são apenas dados. Para adicionar um
+   novo médico, OM ou especialidade, basta incluir uma nova linha no
+   dicionário correspondente, sem precisar mexer em nenhuma função.
    ============================================================ */
 
-// Aponta o pdf.js para o worker também hospedado localmente (vendor/pdfjs),
-// em vez de deixá-lo buscar um worker via CDN. Sem isso, versões recentes do
-// pdf.js caem num modo de compatibilidade mais lento ("fake worker") e,
-// dependendo da rede, ainda tentam alcançar a internet nos bastidores.
-if (typeof pdfjsLib !== "undefined") {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdfjs/pdf.worker.min.js";
+// "Texto como aparece no PDF" -> "Como deve aparecer no documento gerado".
+const medicosConhecidos = {
+    "TENEVERTON": "Ten EVERTON",
+    "MAJFRANCISCOBRAGA": "Maj FRANCISCO BRAGA",
+    "MAJMONICAPOFFO": "Maj MONICA POFFO",
+    "TENTATIANEPINTO": "Ten TATIANE PINTO",
+    "CONFPSIQUIATRIA": "Conferência Psiquiatrica",
+    "TENFRANCISCOSOUZA": "Ten FRANCISCO SOUZA",
+    "CONFTRAUMATOLOGIA": "Conferência Traumatológica"
+};
+
+// Prefixo do posto/graduação (como vem no PDF, maiúsculo) -> abreviação padrão.
+const postosMilitares = {
+    "TEN": "Ten",
+    "CAP": "Cap",
+    "MAJ": "Maj",
+    "TC": "Ten Cel",
+    "CEL": "Cel",
+    "GEN": "Gen",
+    "ST": "Sub Ten",
+    "SGT": "Sgt"
+};
+
+// Nome completo da Organização Militar -> sigla abreviada usada nos documentos.
+const omsConhecidas = {
+    "Comando Militar do Sul": "CMS",
+    "Companhia de Comando do Comando Militar do Sul": "Cia C CMS",
+    "3º Regimento de Cavalaria de Guarda": "3º RCG",
+    "3º Batalhão de Comunicações e Guerra Eletrônica": "3º B Com GE",
+    "3º Batalhão de Polícia do Exército": "3º BPE",
+    "1ª Companhia de Inteligência": "1ª Cia Intlg",
+    "8ª Brigada de Infantaria Motorizada": "8ª Bda Inf Mtz",
+    "Companhia de Comando da 8ª Brigada de Infantaria Motorizada": "Cia C 8ª Bda Inf Mtz",
+    "9º Batalhão de Infantaria Motorizado": "9º BI Mtz",
+    "18º Batalhão de Infantaria Motorizado": "18º BI Mtz",
+    "19º Batalhão de Infantaria Motorizado": "19º BI Mtz",
+    "6º Grupo de Artilharia de Campanha": "6º GAC",
+    "6º Batalhão de Comunicações": "6º B Com",
+    "8º Batalhão Logístico": "8º B Log",
+    "8º Esquadrão de Cavalaria Mecanizado": "8º Esqd C Mec",
+    "8º Pelotão de Polícia do Exército": "8º Pel PE",
+    "Comando de Artilharia do Exército": "Cmdo A Ex",
+    "Bateria de Comando do Comando de Artilharia do Exército": "Bia C Cmdo A Ex",
+    "13º Grupo de Artilharia de Campanha": "13º GAC",
+    "16º Grupo de Artilharia de Campanha Autopropulsado": "16º GAC AP",
+    "4º Grupamento de Engenharia": "4º Gpt E",
+    "Companhia de Comando do 4º Grupamento de Engenharia": "Cia C 4º Gpt E",
+    "1º Batalhão Ferroviário": "1º B Fv",
+    "3º Batalhão de Engenharia de Combate": "3º BE Cmb",
+    "6º Batalhão de Engenharia de Combate": "6º BE Cmb",
+    "3ª Região Militar": "3ª RM",
+    "Base de Administração e Apoio da 3ª Região Militar": "B Adm Ap/ 3ª RM",
+    "1ª Companhia de Guardas": "1ª Cia Gda",
+    "Hospital Militar de Área de Porto Alegre": "HMAPA",
+    "Policlínica Militar de Porto Alegre": "PM Porto Alegre",
+    "Hospital da Guarnição de Alegrete": "HGuAl",
+    "Hospital da Guarnição de Bagé": "HGuB",
+    "Hospital da Guarnição de Santa Maria": "HGuSM",
+    "Hospital da Guarnição de Santiago": "HGuStg",
+    "8ª Circunscrição de Serviço Militar": "8ª CSM",
+    "10ª Circunscrição de Serviço Militar": "10ª CSM",
+    "3º Grupamento Logístico": "3º Gpt Log",
+    "Companhia de Comando do 3º Grupamento Logístico": "Cia C 3º Gpt Log",
+    "3º Batalhão de Suprimento": "3º B Sup",
+    "Parque Regional de Manutenção da 3ª Região Militar": "PqRMnt/3",
+    "Depósito de Subsistência de Santa Maria": "D Sub Santa Maria",
+    "Depósito de Subsistência de Santo Ângelo": "D Sub Santo Ângelo",
+    "13ª Companhia Depósito de Armamento e Munição": "13ª Cia Dep A Mu",
+    "3ª Divisão de Exército": "3ª DE",
+    "Companhia de Comando da 3ª Divisão de Exército": "Cia C 3ª DE",
+    "1º Batalhão de Comunicações": "1º B Com",
+    "Artilharia Divisionária da 3ª Divisão de Exército": "AD/3",
+    "Bateria de Comando da Artilharia Divisionária da 3ª DE": "Bia C AD/3",
+    "27º Grupo de Artilharia de Campanha": "27º GAC",
+    "29º Grupo de Artilharia de Campanha Autopropulsado": "29º GAC AP",
+    "1ª Brigada de Cavalaria Mecanizada": "1ª Bda C Mec",
+    "Esquadrão de Comando da 1ª Brigada de Cavalaria Mecanizada": "Esqd C 1ª Bda C Mec",
+    "1º Regimento de Cavalaria Mecanizado": "1º RC Mec",
+    "2º Regimento de Cavalaria Mecanizado": "2º RC Mec",
+    "4º Regimento de Cavalaria Blindado": "4º RCB",
+    "19º Regimento de Cavalaria Mecanizado": "19º RC Mec",
+    "19º Grupo de Artilharia de Campanha": "19º GAC",
+    "9º Batalhão Logístico": "9º B Log",
+    "1ª Companhia de Engenharia de Combate Mecanizada": "1ª Cia E Cmb Mec",
+    "11ª Companhia de Comunicações Mecanizada": "11ª Cia Com Mec",
+    "1º Pelotão de Polícia do Exército": "1º Pel PE",
+    "2ª Brigada de Cavalaria Mecanizada": "2ª Bda C Mec",
+    "Esquadrão de Comando da 2ª Brigada de Cavalaria Mecanizada": "Esqd C 2ª Bda C Mec",
+    "5º Regimento de Cavalaria Mecanizado": "5º RC Mec",
+    "6º Regimento de Cavalaria Blindado": "6º RCB",
+    "8º Regimento de Cavalaria Mecanizado": "8º RC Mec",
+    "22º Grupo de Artilharia de Campanha": "22º GAC",
+    "10º Batalhão Logístico": "10º B Log",
+    "2ª Companhia de Engenharia de Combate Mecanizada": "2ª Cia E Cmb Mec",
+    "12ª Companhia de Comunicações": "12ª Cia Com",
+    "2º Pelotão de Polícia do Exército": "2º Pel PE",
+    "3ª Brigada de Cavalaria Mecanizada": "3ª Bda C Mec",
+    "Esquadrão de Comando da 3ª Brigada de Cavalaria Mecanizada": "Esqd C 3ª Bda C Mec",
+    "3º Regimento de Cavalaria Mecanizado": "3º RC Mec",
+    "7º Regimento de Cavalaria Mecanizado": "7º RC Mec",
+    "9º Regimento de Cavalaria Blindado": "9º RCB",
+    "12º Regimento de Cavalaria Mecanizado": "12º RC Mec",
+    "25º Grupo de Artilharia de Campanha": "25º GAC",
+    "3º Batalhão Logístico": "3º B Log",
+    "2ª Bateria de Artilharia Antiaérea": "2ª Bia AAAe",
+    "3ª Companhia de Engenharia de Combate Mecanizada": "3ª Cia E Cmb Mec",
+    "13ª Companhia de Comunicações Mecanizada": "13ª Cia Com Mec",
+    "3º Pelotão de Polícia do Exército": "3º Pel PE",
+    "6ª Brigada de Infantaria Blindada": "6ª Bda Inf Bld",
+    "Companhia de Comando da 6ª Brigada de Infantaria Blindada": "Cia C 6ª Bda Inf Bld",
+    "1º Regimento de Carros de Combate": "1º RCC",
+    "4º Regimento de Carros de Combate": "4º RCC",
+    "7º Batalhão de Infantaria Blindado": "7º BIB",
+    "29º Batalhão de Infantaria Blindado": "29º BIB",
+    "3º Grupo de Artilharia de Campanha Autopropulsado": "3º GAC AP",
+    "12º Batalhão de Engenharia de Combate Blindado": "12º BE Cmb Bld",
+    "4º Batalhão Logístico": "4º B Log",
+    "6º Esquadrão de Cavalaria Mecanizado": "6º Esqd C Mec",
+    "6ª Bateria de Artilharia Antiaérea": "6ª Bia AAAe",
+    "3ª Companhia de Comunicações Blindada": "3ª Cia Com Bld",
+    "26º Pelotão de Polícia do Exército": "26º Pel PE",
+    "5ª Região Militar": "5ª RM",
+    "Base de Administração e Apoio da 5ª Região Militar": "B Adm Ap/ 5ª RM",
+    "Parque Regional de Manutenção da 5ª Região Militar": "PqRMnt/5",
+    "5º Batalhão de Suprimento": "5º B Sup",
+    "5ª Companhia de Polícia do Exército": "5ª Cia PE",
+    "Hospital Geral de Curitiba": "HGeC",
+    "Hospital da Guarnição de Florianópolis": "HGuFlo",
+    "15ª Circunscrição de Serviço Militar": "15ª CSM",
+    "16ª Circunscrição de Serviço Militar": "16ª CSM",
+    "5ª Divisão de Exército": "5ª DE",
+    "Companhia de Comando da 5ª Divisão de Exército": "Cia C 5ª DE",
+    "14º Regimento de Cavalaria Mecanizado": "14º RC Mec",
+    "27º Batalhão Logístico": "27º B Log",
+    "Artilharia Divisionária da 5ª Divisão de Exército": "AD/5",
+    "Bateria de Comando da Artilharia Divisionária da 5ª DE": "Bia C AD/5",
+    "15º Grupo de Artilharia de Campanha Autopropulsado": "15º GAC AP",
+    "5ª Brigada de Cavalaria Blindada": "5ª Bda C Bld",
+    "Esquadrão de Comando da 5ª Brigada de Cavalaria Blindada": "Esqd C 5ª Bda C Bld",
+    "3º Regimento de Carros de Combate": "3º RCC",
+    "5º Regimento de Carros de Combate": "5º RCC",
+    "13º Batalhão de Infantaria Blindado": "13º BIB",
+    "20º Batalhão de Infantaria Blindado": "20º BIB",
+    "5º Grupo de Artilharia de Campanha Autopropulsado": "5º GAC AP",
+    "5º Batalhão de Engenharia de Combate Blindado": "5º BE Cmb Bld",
+    "5º Batalhão Logístico": "5º B Log",
+    "5º Esquadrão de Cavalaria Mecanizado": "5º Esqd C Mec",
+    "5ª Companhia de Comunicações Blindada": "5ª Cia Com Bld",
+    "25º Pelotão de Polícia do Exército": "25º Pel PE",
+    "14ª Brigada de Infantaria Motorizada": "14ª Bda Inf Mtz",
+    "Companhia de Comando da 14ª Brigada de Infantaria Motorizada": "Cia C 14ª Bda Inf Mtz",
+    "23º Batalhão de Infantaria": "23º BI",
+    "62º Batalhão de Infantaria": "62º BI",
+    "63º Batalhão de Infantaria": "63º BI",
+    "28º Grupo de Artilharia de Campanha": "28º GAC",
+    "14º Pelotão de Polícia do Exército": "14º Pel PE",
+    "15ª Brigada de Infantaria Mecanizada": "15ª Bda Inf Mec",
+    "Companhia de Comando da 15ª Brigada de Infantaria Mecanizada": "Cia C 15ª Bda Inf Mec",
+    "30º Batalhão de Infantaria Mecanizado": "30º BI Mec",
+    "33º Batalhão de Infantaria Mecanizado": "33º BI Mec",
+    "34º Batalhão de Infantaria Mecanizado": "34º BI Mec",
+    "26º Grupo de Artilharia de Campanha": "26º GAC",
+    "15º Batalhão Logístico": "15º B Log",
+    "15ª Companhia de Infantaria Motorizada": "15ª Cia Inf Mtz",
+    "16º Esquadrão de Cavalaria Mecanizado": "16º Esqd C Mec",
+    "15ª Companhia de Engenharia de Combate Mecanizada": "15ª Cia E Cmb Mec",
+    "15ª Companhia de Comunicações Mecanizada": "15ª Cia Com Mec"
+};
+
+// Trecho do cargo (como aparece no PDF) -> categoria usada para decidir
+// pronome ("esse"/"essa") e tratamento ("Comandante"/"Chefe").
+const cargosConhecidos = {
+    "COMANDANTE": "Comando",
+    "SUBCOMANDANTE": "Comando",
+    "CHEFE": "Chefia",
+    "Chefe ao Escalão": "Grande Comando",
+    "DIRETOR": "Comando",
+    "SUBDIRETOR": "Comando",
+    "SUBDIRETOR(A)": "Comando"
+};
+
+// Lista de especialidades médicas reconhecidas pelo sistema.
+const especialidadesConhecidas = [
+    "NEUROCIRURGIA",
+    "NEUROLOGIA",
+    "TRAUMATOLOGIA",
+    "PSIQUIATRIA",
+    "VASCULAR",
+    "HEMATOLOGIA",
+    "UROLOGIA",
+    "MASTOLOGIA",
+    "ENDOCRINOLOGIA",
+    "ONCOLOGIA",
+    "PNEUMOLOGIA",
+    "CIRURGIÃO GERAL",
+    "CIRURGIA DE MÃO",
+    "CIRURGIA BUCO-MAXILO-FACIAL"
+];
+
+// Número do mês (com e sem zero à esquerda) -> abreviação em português.
+const mesesAbreviados = {
+    "01": "JAN", "02": "FEV", "03": "MAR", "04": "ABR", "05": "MAIO", "06": "JUN",
+    "07": "JUL", "08": "AGO", "09": "SET", "10": "OUT", "11": "NOV", "12": "DEZ",
+    "1": "JAN", "2": "FEV", "3": "MAR", "4": "ABR", "5": "MAIO", "6": "JUN",
+    "7": "JUL", "8": "AGO", "9": "SET"
+};
+/* ============================================================
+   MÓDULO 5 — UTILITÁRIOS DE TEXTO
+   O que este arquivo faz: funções pequenas e genéricas de limpeza de
+   texto, reaproveitadas por vários formatadores e extratores.
+   ============================================================ */
+
+/**
+ * Limpa espaços/quebras de linha e normaliza a pontuação de um texto
+ * extraído do PDF (o PDF costuma vir com espaços e quebras de linha
+ * bagunçados).
+ */
+function normalizarTexto(texto) {
+    if (!texto) return "";
+    return texto
+        .replace(/[\r\n]+/g, " ")     // quebras de linha viram espaço
+        .replace(/\s{2,}/g, " ")      // vários espaços seguidos viram um só
+        .replace(/\s+,/g, ",")        // remove espaço antes de vírgula
+        .replace(/,\s*/g, ", ")       // garante um espaço depois da vírgula
+        .replace(/,+/g, ",")          // remove vírgulas duplicadas
+        .replace(/,\s*,/g, ", ")      // remove vírgula duplicada com espaço no meio
+        .replace(/\s+([.;:])/g, "$1") // remove espaço antes de . ; :
+        .replace(/\s{2,}/g, " ")      // reforça a limpeza de espaços duplos
+        .trim();                       // remove espaços nas pontas
 }
+
+/**
+ * Deixa cada palavra com a primeira letra maiúscula
+ * (ex.: "SALA DE ESPERA" -> "Sala De Espera").
+ */
+function capitalizarPalavras(texto) {
+    return texto
+        .trim()
+        .toLowerCase()
+        .split(/\s+/)
+        .map(p => p.charAt(0).toUpperCase() + p.slice(1))
+        .join(" ");
+}
+
+/**
+ * Padroniza números de sala/local para o formato "nºX"
+ * (ex.: "Sala N° 12" -> "Sala nº12", "Sala 12" -> "Sala nº12").
+ */
+function adicionarNumeroLocal(texto) {
+    return texto
+        .replace(/\bN[º°]\s*(\d+)/gi, "nº$1")          // já tem "Nº"/"N°": padroniza formato
+        .replace(/(?<!nº)\b(\d+)\b/gi, "nº$1");        // número solto (sem "nº" antes): adiciona o prefixo
+}
+/* ============================================================
+   MÓDULO 6 — FORMATADORES
+   O que este arquivo faz: transforma os dados crus (já extraídos do
+   PDF) no formato final que aparece nos documentos: nome do médico
+   com posto abreviado, sigla da OM, especialidade, datas e local.
+   ============================================================ */
+
+/**
+ * Formata o nome do médico: primeiro tenta um "de-para" exato
+ * (medicosConhecidos); senão, identifica o posto militar no início
+ * do nome e abrevia; por último, cai para "Primeira Letra Maiúscula".
+ */
+function formatarMedico(nome) {
+    if (!nome) return "";
+    nome = nome.toUpperCase().trim();
+
+    // 1) Nome exato já cadastrado na base de conhecimento.
+    if (medicosConhecidos[nome]) {
+        return medicosConhecidos[nome];
+    }
+
+    // 2) O nome começa com um posto militar conhecido (ex.: "MAJ...")?
+    for (let posto in postosMilitares) {
+        if (nome.startsWith(posto)) {
+            const restante = nome.substring(posto.length).trim();
+            return `${postosMilitares[posto]} ${restante}`;
+        }
+    }
+
+    // 3) Nenhum caso especial: apenas capitaliza cada palavra.
+    return nome
+        .toLowerCase()
+        .replace(/\b\w/g, letra => letra.toUpperCase());
+}
+
+/** Devolve a sigla da OM se ela estiver cadastrada; senão, devolve o nome original. */
+function abreviarOM(om) {
+    if (!om) return "";
+    return omsConhecidas[om] || om;
+}
+
+/** Procura, no texto, qual especialidade conhecida está presente e a devolve capitalizada. */
+function formatarEspecialidade(texto) {
+    texto = texto.toUpperCase();
+    for (let esp of especialidadesConhecidas) {
+        if (texto.includes(esp)) {
+            return esp
+                .toLowerCase()
+                .replace(/\b\w/g, letra => letra.toUpperCase());
+        }
+    }
+    return "";
+}
+
+/** Mesma busca de formatarEspecialidade, mas devolve o texto em maiúsculas "cru" (usado na planilha Excel). */
+function extrairEspecialidadeCrua(texto) {
+    if (!texto) return "";
+    const textoUpper = texto.toUpperCase();
+    for (let esp of especialidadesConhecidas) {
+        if (textoUpper.includes(esp)) {
+            return esp;
+        }
+    }
+    return "";
+}
+
+/** Converte "dd/mm/aaaa" para "dd/mm/aa" (ano com 2 dígitos). */
+function formatarData(data) {
+    if (!data) return "";
+    const partes = data.split("/");
+    if (partes.length !== 3) return data;   // formato inesperado: devolve como veio
+    const dia = partes[0];
+    const mes = partes[1];
+    const ano = partes[2].slice(-2);
+    return `${dia}/${mes}/${ano}`;
+}
+
+/** Converte "dd/mm/aaaa" para o formato militar "d MES aa" (ex.: "5 JUN 26"). */
+function formatarDataAbreviada(data) {
+    if (!data) return "";
+    const partes = data.split("/");
+    return `${parseInt(partes[0])} ${mesesAbreviados[partes[1]]} ${partes[2].slice(-2)}`;
+}
+
+// Os dois formatadores abaixo usam a mesma regra de formatarDataAbreviada,
+// mas recebem nomes próprios para deixar claro, em cada ponto do código,
+// COM QUE FINALIDADE a data está sendo formatada (texto do documento
+// militar vs. nome do arquivo gerado). Se um dia essas duas regras
+// precisarem divergir, já existe um lugar certo para alterar cada uma
+// sem afetar a outra.
+function formatarDataMilitar(data) {
+    return formatarDataAbreviada(data);
+}
+
+function formatarDataNomeArquivo(data) {
+    return formatarDataAbreviada(data);
+}
+
+/** Limpa e padroniza o texto do local de atendimento (remove lixo, adiciona "nºX", etc.). */
+function formatarLocal(local) {
+    if (!local) return "";
+    local = local
+        .replace(/Usuário Marcação.*$/i, "")   // remove tudo a partir de "Usuário Marcação"
+        .replace(/\s*-\s*/g, ", ");             // troca hífen separador por vírgula
+
+    // Se começar com "Nº Andar", separa o andar do resto com vírgula.
+    if (/^(\d+º?\s*Andar)/i.test(local)) {
+        local = local.replace(/^(\d+º?\s*Andar)\s*(.*)$/i, "$1, $2");
+    }
+
+    return normalizarTexto(local);
+}
+
+/** Devolve o dia da semana (por extenso, em português) de uma data "dd/mm/aaaa". */
+function diaSemana(data) {
+    if (!data) return "";
+    const partes = data.split("/");
+    const d = new Date(
+        parseInt(partes[2]),
+        parseInt(partes[1]) - 1,   // mês em JS começa em 0 (Janeiro = 0)
+        parseInt(partes[0])
+    );
+    const dias = [
+        "Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira",
+        "Quinta-feira", "Sexta-feira", "Sábado"
+    ];
+    return dias[d.getDay()];
+}
+/* ============================================================
+   MÓDULO 7 — EXTRATORES DE DADOS DO PDF
+   O que este arquivo faz: usa expressões regulares (regex) para
+   localizar, dentro do texto bruto de cada PDF, os campos que
+   interessam (paciente, médico, data, local, OM, etc.) e devolve
+   tudo já organizado em um único objeto de dados.
+   ============================================================ */
+
+/** Aplica um regex ao texto e devolve o primeiro grupo capturado, já normalizado (ou "" se não achar). */
+function extrair(texto, regex) {
+    const match = texto.match(regex);
+    if (!match) return "";
+    return normalizarTexto(match[1]);
+}
+
+/** Extrai o nome completo da OM que está solicitando o exame, a partir do PDF de Solicitação. */
+function extrairOMSolicitante(textoSolicitacao) {
+    const match = textoSolicitacao.match(
+        /(?:Do|Da|Ao)\s+(?:\S*comandante|Chefe|diretor)\s+(?:do|da|ao)\s+(.*?)\s+(?:Ao|À)/i
+    );
+    if (!match) return "";
+    return normalizarTexto(match[1]);
+}
+
+/** Identifica se a OM solicitante é do tipo "Comando" ou "Chefia", com base no cargo mencionado no texto. */
+function extrairTipoOM(textoSolicitacao) {
+    const match = textoSolicitacao.match(/Do\s+(.*?)\s+Ao/i);
+    if (!match) return "Comando";   // não achou o cargo: usa "Comando" como padrão seguro
+
+    const cargo = normalizarTexto(match[1]).toUpperCase();
+    for (const chave in cargosConhecidos) {
+        if (cargo.includes(chave.toUpperCase())) {
+            return cargosConhecidos[chave];
+        }
+    }
+    return "Comando";
+}
+
+/**
+ * Extrai TODOS os dados de um agendamento a partir do texto do PDF de
+ * Marcação (obrigatório) e, opcionalmente, do texto do PDF de
+ * Solicitação (usado para OM, tipo de OM, número e data do DIEx).
+ * Devolve um objeto com todos os campos já formatados, ou null se o
+ * texto principal estiver vazio.
+ */
+function extrairDadosCompletos(texto, textoSolicitacao) {
+    if (!texto) return null;
+
+    // --- Paciente: tenta o padrão principal e, se não achar, um padrão alternativo ---
+    let paciente = normalizarTexto(
+        extrair(texto, /Paciente:\s*\d+\s*-\s*(.*?)\s*Médico\(a\)\/Profissional:/i)
+    ).replace(/\s{2,}/g, " ").trim();
+
+    if (!paciente) {
+        paciente = normalizarTexto(
+            extrair(texto, /Especialidade:\s*([A-ZÀ-Ú\s]+?)\s*Agendamento:/i)
+        );
+    }
+
+    // --- Médico: idem, com um padrão alternativo de fallback ---
+    let medico = normalizarTexto(
+        extrair(texto, /Médico\(a\)\/Profissional:\s*([A-ZÀ-Ú]+)/i)
+    );
+
+    if (!medico) {
+        const match = texto.match(
+            /Usuário Marcação:\s*[A-ZÀ-Ú]+\s*([A-ZÀ-Ú]+)\s*Médico\/Prof\.:/i
+        );
+        if (match) medico = normalizarTexto(match[1]);
+    }
+
+    // --- Data e hora da consulta ---
+    let dataHora = extrair(
+        texto, /Dia da Consulta:\s*([0-9\/]{10}\s*-\s*[0-9:]{5})/i
+    );
+
+    if (!dataHora) {
+        const dataTmp = extrair(texto, /Agendamento:\s*([0-9\/]{10})/i);
+        const horaTmp = extrair(texto, /([0-9]{2}:[0-9]{2})/i);
+
+        if (dataTmp && horaTmp) {
+            dataHora = `${dataTmp} - ${horaTmp}`;
+        }
+    }
+
+    let data = "";
+    let horario = "";
+
+    if (dataHora) {
+        const partes = dataHora.split("-");
+        data = partes[0].trim();
+        horario = partes[1].trim();
+    }
+
+    // --- Local do atendimento: padrão principal e um alternativo ---
+    let local = extrair(
+        texto, /Local da Consulta:\s*(.*?)Usuário da Marcação/i
+    );
+
+    if (local) {
+        const match = local.match(/(.*?)\s*-\s*(.*)/i);
+        if (match) {
+            const bloco1 = capitalizarPalavras(match[1]);
+            const bloco2 = adicionarNumeroLocal(capitalizarPalavras(match[2]));
+            local = `${bloco1}, ${bloco2}`;
+        }
+    }
+
+    if (!local) {
+        const match = texto.match(
+            /(?:manh[aã]|tarde)\s+(.*?)\s+Local\s+Consulta:\s*(.*?)\s*Usuário\s+Marcação:/i
+        );
+        if (match) {
+            const bloco1 = capitalizarPalavras(match[1]);
+            const bloco2 = adicionarNumeroLocal(capitalizarPalavras(match[2]));
+            local = `${bloco1}, ${bloco2}`;
+        }
+    }
+
+    // --- Número do DIEx de solicitação (se o PDF de solicitação foi anexado) ---
+    let numeroDIEx = "";
+    if (textoSolicitacao) {
+        const matchNum = textoSolicitacao.match(/DIEx\s*n[º°]?\s*(\d+)/i);
+        if (matchNum) {
+            numeroDIEx = matchNum[1];
+        }
+    }
+
+    // --- Data do DIEx de solicitação: tenta 4 formatos diferentes, em ordem de prioridade ---
+    let dataDIEx = "";
+    if (textoSolicitacao) {
+        const mesesNum = {
+            "janeiro": "01", "fevereiro": "02", "março": "03", "marco": "03", "abril": "04",
+            "maio": "05", "junho": "06", "julho": "07", "agosto": "08", "setembro": "09",
+            "outubro": "10", "novembro": "11", "dezembro": "12",
+            "jan": "01", "fev": "02", "mar": "03", "abr": "04", "mai": "05", "jun": "06",
+            "jul": "07", "ago": "08", "set": "09", "out": "10", "nov": "11", "dez": "12"
+        };
+
+        const matchDataExtenso = textoSolicitacao.match(/(\d{1,2})\s+de\s+([a-zA-ZçÇ]+)\s+de\s+(\d{2,4})/i);
+        const matchDataMilitar = textoSolicitacao.match(/de\s+(\d{1,2})\s+([A-Z]{3})\s+(\d{2,4})/i);
+        const matchDataAssinatura = textoSolicitacao.match(/em\s+(\d{1,2}\/\d{1,2}\/\d{2,4}),?\s*às/i);
+
+        if (matchDataExtenso) {
+            // Ex.: "5 de junho de 2026"
+            const dia = matchDataExtenso[1].padStart(2, '0');
+            const mesNome = matchDataExtenso[2].toLowerCase();
+            const ano = matchDataExtenso[3].length === 2 ? `20${matchDataExtenso[3]}` : matchDataExtenso[3];
+            const mes = mesesNum[mesNome] || "01";
+            dataDIEx = `${dia}/${mes}/${ano}`;
+        } else if (matchDataMilitar) {
+            // Ex.: "de 5 JUN 26"
+            const dia = matchDataMilitar[1].padStart(2, '0');
+            const mesNome = matchDataMilitar[2].toLowerCase();
+            const ano = matchDataMilitar[3].length === 2 ? `20${matchDataMilitar[3]}` : matchDataMilitar[3];
+            const mes = mesesNum[mesNome] || "01";
+            dataDIEx = `${dia}/${mes}/${ano}`;
+        } else if (matchDataAssinatura) {
+            // Ex.: "...em 05/06/2026, às..."
+            dataDIEx = formatarData(matchDataAssinatura[1]);
+        } else {
+            // Último recurso: qualquer data solta no texto que não seja a data de nascimento.
+            const matchDataSeparador = textoSolicitacao.match(/(?<!Nascimento:\s*)\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/i);
+            if (matchDataSeparador) {
+                dataDIEx = formatarData(matchDataSeparador[1]);
+            }
+        }
+    }
+
+    // --- Campos derivados (calculados a partir dos anteriores) ---
+    const especialidade = formatarEspecialidade(texto);
+    const especialidadeCrua = extrairEspecialidadeCrua(texto);
+
+    const om = extrairOMSolicitante(textoSolicitacao);
+    const omAbr = abreviarOM(om);
+    const tipoOM = extrairTipoOM(textoSolicitacao);
+
+    const cargoOM = tipoOM === "Comando" ? "Comandante" : "Chefe";
+    const pronome = tipoOM === "Comando" ? "esse" : "essa";
+
+    const dataMilitar = formatarDataMilitar(data);
+    const dataNomeArquivo = formatarDataNomeArquivo(data);
+
+    return {
+        paciente, medico, dataHora, data, horario, local, especialidade, especialidadeCrua,
+        om, omAbr, tipoOM, cargoOM, pronome, dataMilitar, dataNomeArquivo,
+        numeroDIEx, dataDIEx
+    };
+}
+
+/**
+ * Extrai os dados específicos de um parecer da Comissão de Ética
+ * (sessão, paciente e data), usados na página DOC/Renomeador.
+ */
+function extrairDadosComissaoEtica(texto) {
+    if (!texto) return null;
+
+    const textoNormalizado = normalizarTexto(texto);
+
+    const matchSessao = textoNormalizado.match(
+        /Sess[ãa]o[s]?:?\s*(\d{1,3}\s*\/\s*\d{4})/i
+    );
+    const sessao = matchSessao ? matchSessao[1].replace(/\s+/g, "") : "";
+
+    const matchPaciente = textoNormalizado.match(
+        /Paciente:?\s*(.*?)\s*Solicitante/i
+    );
+    const paciente = matchPaciente ? matchPaciente[1].toUpperCase() : "";
+
+    const matchData = textoNormalizado.match(
+        /\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/
+    );
+    const data = matchData ? matchData[1] : "";
+    const dataFormatada = data ? formatarDataAbreviada(data) : "";
+
+    return { sessao, paciente, data, dataFormatada };
+}
+/* ============================================================
+   MÓDULO 8 — LEITURA DE ARQUIVOS PDF
+   O que este arquivo faz: usa a biblioteca pdf.js (carregada via
+   CDN no HTML) para ler um arquivo PDF escolhido pelo usuário e
+   transformar seu conteúdo em texto puro, que depois é passado para
+   os extratores do MÓDULO 7.
+   ============================================================ */
 
 /**
  * Lê um arquivo PDF e devolve seu texto através do callback "aoConcluir".
@@ -505,20 +1095,6 @@ configurarToggleDropzone("headerDropzoneDoc", "areaDropzoneDoc", "automed_dropzo
    em cada uma das páginas (LME, DOC e EXCEL).
    ============================================================ */
 
-/**
- * Escreve "valor" (ou "-" se vazio) dentro de "el" e marca o card com a
- * classe "campo-vazio" quando o dado não foi encontrado na extração —
- * ver estilo correspondente em style.css. É só um alerta visual (não
- * bloqueia nada): ajuda o usuário a notar, de relance, quais campos
- * pode valer a pena conferir/completar manualmente antes de usar o
- * documento gerado.
- */
-function definirValorCampo(el, valor) {
-    if (!el) return;
-    el.textContent = valor || "-";
-    el.classList.toggle("campo-vazio", !valor);
-}
-
 /** Atualiza os cards "Dados Extraídos" da página LME. */
 function atualizarPainelLME() {
     // Se um paciente foi carregado do banco, usa esses dados; senão,
@@ -526,14 +1102,25 @@ function atualizarPainelLME() {
     const dados = dadosBancoCarregados || extrairDadosCompletos(textoPDF, textoPDFSolicitacao);
     if (!dados) return;
 
-    definirValorCampo(document.getElementById("dbgPaciente"), dados.paciente);
-    definirValorCampo(document.getElementById("dbgMedico"), formatarMedico(dados.medico));
-    definirValorCampo(document.getElementById("dbgDataHora"), dados.dataHora);
-    definirValorCampo(document.getElementById("dbgLocal"), dados.local);
-    definirValorCampo(document.getElementById("dbgEspecialidade"), dados.especialidade);
-    definirValorCampo(document.getElementById("dbgOM"), dados.om);
-    definirValorCampo(document.getElementById("dbgOMAbr"), dados.omAbr);
-    definirValorCampo(document.getElementById("dbgTipoOM"), dados.tipoOM);
+    const dbgPaciente = document.getElementById("dbgPaciente");
+    const dbgMedico = document.getElementById("dbgMedico");
+    const dbgDataHora = document.getElementById("dbgDataHora");
+    const dbgLocal = document.getElementById("dbgLocal");
+    const dbgEspecialidade = document.getElementById("dbgEspecialidade");
+
+    if (dbgPaciente) dbgPaciente.textContent = dados.paciente || "-";
+    if (dbgMedico) dbgMedico.textContent = formatarMedico(dados.medico) || "-";
+    if (dbgDataHora) dbgDataHora.textContent = dados.dataHora || "-";
+    if (dbgLocal) dbgLocal.textContent = dados.local || "-";
+    if (dbgEspecialidade) dbgEspecialidade.textContent = dados.especialidade || "-";
+
+    const dbgOM = document.getElementById("dbgOM");
+    const dbgOMAbr = document.getElementById("dbgOMAbr");
+    const dbgTipoOM = document.getElementById("dbgTipoOM");
+
+    if (dbgOM) dbgOM.textContent = dados.om || "-";
+    if (dbgOMAbr) dbgOMAbr.textContent = dados.omAbr || "-";
+    if (dbgTipoOM) dbgTipoOM.textContent = dados.tipoOM || "-";
 }
 
 /** Atualiza os cards da página DOC quando está no modo "LME SCAN", e sugere o nome do arquivo. */
@@ -541,13 +1128,19 @@ function atualizarPainelDocLmeScan() {
     const dados = extrairDadosCompletos(textoConsultaDoc, textoSolicitacaoDoc);
     if (!dados) return;
 
-    definirValorCampo(document.getElementById("dbgPacienteDoc"), dados.paciente);
-    definirValorCampo(document.getElementById("dbgEspecialidadeDoc"), dados.especialidade);
+    const dbgPacienteDoc = document.getElementById("dbgPacienteDoc");
+    const dbgEspecialidadeDoc = document.getElementById("dbgEspecialidadeDoc");
+
+    if (dbgPacienteDoc) dbgPacienteDoc.textContent = dados.paciente || "-";
+    if (dbgEspecialidadeDoc) dbgEspecialidadeDoc.textContent = dados.especialidade || "-";
 
     // OM e Data só existem depois que o PDF de Solicitação também foi lido.
     if (textoSolicitacaoDoc) {
-        definirValorCampo(document.getElementById("dbgOMAbrDoc"), dados.omAbr);
-        definirValorCampo(document.getElementById("dbgDataDoc"), dados.data);
+        const dbgOMAbrDoc = document.getElementById("dbgOMAbrDoc");
+        const dbgDataDoc = document.getElementById("dbgDataDoc");
+
+        if (dbgOMAbrDoc) dbgOMAbrDoc.textContent = dados.omAbr || "-";
+        if (dbgDataDoc) dbgDataDoc.textContent = dados.data || "-";
 
         const campoNome = document.getElementById("nomeArquivoGerado");
 
@@ -565,9 +1158,13 @@ function atualizarPainelComissaoEtica() {
     const dados = extrairDadosComissaoEtica(textoComissaoEtica);
     if (!dados) return;
 
-    definirValorCampo(document.getElementById("dbgSessaoComissao"), dados.sessao);
-    definirValorCampo(document.getElementById("dbgPacienteComissao"), dados.paciente);
-    definirValorCampo(document.getElementById("dbgDataComissao"), dados.dataFormatada);
+    const dbgSessao = document.getElementById("dbgSessaoComissao");
+    const dbgPaciente = document.getElementById("dbgPacienteComissao");
+    const dbgData = document.getElementById("dbgDataComissao");
+
+    if (dbgSessao) dbgSessao.textContent = dados.sessao || "-";
+    if (dbgPaciente) dbgPaciente.textContent = dados.paciente || "-";
+    if (dbgData) dbgData.textContent = dados.dataFormatada || "-";
 
     const campoNome = document.getElementById("nomeArquivoGerado");
     const dadosCompletos = dados.sessao && dados.paciente && dados.dataFormatada;
@@ -583,18 +1180,12 @@ function formatarDataAno2Digitos(textoData) {
     return textoData.replace(/\b(\d{1,2}\/\d{1,2}\/)\d{2}(\d{2})\b/g, "$1$2");
 }
 
-// Guarda o último objeto de dados usado para montar a linha do Excel,
-// só para o botão "COPIAR PARA EXCEL" (MÓDULO 15) poder avisar sobre
-// campos faltantes sem precisar recalcular tudo de novo.
-let ultimosDadosExcel = null;
-
 /** Monta a linha de texto (separada por " - ") que será colada na planilha Excel. */
 function atualizarLinhaExcel() {
     const campoResultado = document.getElementById("resultadoExcel");
     if (!campoResultado) return;
 
     const dados = dadosBancoCarregados || extrairDadosCompletos(textoPDFExcelAgendamento, textoPDFExcelSolicitacao);
-    ultimosDadosExcel = dados;
 
     if (!dados) {
         campoResultado.value = "";
@@ -749,36 +1340,25 @@ document.getElementById("gerarBtn").addEventListener("click", () => {
 
     if (!modeloEl) return;
 
-    // Avisa (sem bloquear) se algum campo importante para ESTE modelo não
-    // foi encontrado no PDF — ver MÓDULO 22, mais abaixo.
-    avisarCamposFaltantes(dados, camposEssenciaisPorModelo(modeloSelect.value));
-
     let modelo = modeloEl.innerHTML;
     const pronomePacienteTexto = pronomePaciente.value;
 
     // Troca cada {VARIAVEL} pelo valor correspondente dos dados extraídos.
-    // Cada valor passa por escaparHTML() antes de entrar no template: os
-    // dados vêm de texto lido de um PDF (fora do nosso controle), e o
-    // resultado é inserido como innerHTML logo abaixo — sem escapar, um
-    // PDF com "<" ou ">" em algum campo (nome de paciente, local, etc.)
-    // seria interpretado como HTML em vez de aparecer como texto. O HTML
-    // do próprio modelo (negrito, spans) continua intacto: só os valores
-    // extraídos são escapados, não o "molde" do texto.
     let resultado = modelo
-        .replace(/{PACIENTE}/g, escaparHTML(dados.paciente))
-        .replace(/{MEDICO}/g, escaparHTML(formatarMedico(dados.medico)))
-        .replace(/{ESPECIALIDADE}/g, escaparHTML(dados.especialidade))
-        .replace(/{DATA}/g, escaparHTML(formatarData(dados.data)))
-        .replace(/{DATA_MILITAR}/g, escaparHTML(dados.dataMilitar))
-        .replace(/{DIASEMANA}/g, escaparHTML(diaSemana(dados.data)))
-        .replace(/{HORARIO}/g, escaparHTML(dados.horario))
-        .replace(/{LOCAL}/g, escaparHTML(formatarLocal(dados.local)))
-        .replace(/{OM}/g, escaparHTML(dados.om))
-        .replace(/{OMABR}/g, escaparHTML(dados.omAbr))
-        .replace(/{TIPO_OM}/g, escaparHTML(dados.tipoOM))
-        .replace(/{CARGO_OM}/g, escaparHTML(dados.cargoOM))
-        .replace(/{PRONOME}/g, escaparHTML(dados.pronome))
-        .replace(/{PRONOMEPACIENTE}/g, escaparHTML(pronomePacienteTexto));
+        .replace(/{PACIENTE}/g, dados.paciente || "")
+        .replace(/{MEDICO}/g, formatarMedico(dados.medico) || "")
+        .replace(/{ESPECIALIDADE}/g, dados.especialidade || "")
+        .replace(/{DATA}/g, formatarData(dados.data) || "")
+        .replace(/{DATA_MILITAR}/g, dados.dataMilitar || "")
+        .replace(/{DIASEMANA}/g, diaSemana(dados.data) || "")
+        .replace(/{HORARIO}/g, dados.horario || "")
+        .replace(/{LOCAL}/g, formatarLocal(dados.local) || "")
+        .replace(/{OM}/g, dados.om || "")
+        .replace(/{OMABR}/g, dados.omAbr || "")
+        .replace(/{TIPO_OM}/g, dados.tipoOM || "")
+        .replace(/{CARGO_OM}/g, dados.cargoOM || "")
+        .replace(/{PRONOME}/g, dados.pronome || "")
+        .replace(/{PRONOMEPACIENTE}/g, pronomePacienteTexto || "");
 
     resultado = converterNegritos(resultado);
 
@@ -881,8 +1461,6 @@ function gerarNomeArquivoLmeScan() {
     const dados = extrairDadosCompletos(textoConsultaDoc, textoSolicitacaoDoc);
 
     if (dados) {
-        avisarCamposFaltantes(dados, ["paciente", "omAbr", "data", "especialidade"]);
-
         document.getElementById("nomeArquivoGerado").value =
             `${dados.paciente} - ${dados.omAbr} - ${dados.dataNomeArquivo} - ${dados.especialidade}.pdf`;
     }
@@ -970,26 +1548,31 @@ document.getElementById("inputPesquisaDoc")?.addEventListener("input", (e) => {
     if (mapaPacientesBanco.has(valorDigitado)) {
         const dados = mapaPacientesBanco.get(valorDigitado);
 
-        definirValorCampo(document.getElementById("dbgPacienteDoc"), dados.paciente);
-        definirValorCampo(document.getElementById("dbgOMAbrDoc"), dados.omAbr);
-        definirValorCampo(document.getElementById("dbgDataDoc"), dados.data);
-        definirValorCampo(document.getElementById("dbgEspecialidadeDoc"), dados.especialidade);
+        const dbgPacienteDoc = document.getElementById("dbgPacienteDoc");
+        const dbgOMAbrDoc = document.getElementById("dbgOMAbrDoc");
+        const dbgDataDoc = document.getElementById("dbgDataDoc");
+        const dbgEspecialidadeDoc = document.getElementById("dbgEspecialidadeDoc");
+
+        if (dbgPacienteDoc) dbgPacienteDoc.textContent = dados.paciente || "-";
+        if (dbgOMAbrDoc) dbgOMAbrDoc.textContent = dados.omAbr || "-";
+        if (dbgDataDoc) dbgDataDoc.textContent = dados.data || "-";
+        if (dbgEspecialidadeDoc) dbgEspecialidadeDoc.textContent = dados.especialidade || "-";
 
         const campoNome = document.getElementById("nomeArquivoGerado");
         if (campoNome) {
             campoNome.value = `${dados.paciente} - ${dados.omAbr} - ${dados.dataNomeArquivo} - ${dados.especialidade}.pdf`;
         }
     } else if (valorDigitado === "") {
-        // Campo de busca limpo: reseta os cards para o estado neutro
-        // (sem a marcação visual de "campo não encontrado" — aqui é só
-        // "ainda não pesquisou nada", não uma extração que falhou).
-        ["dbgPacienteDoc", "dbgOMAbrDoc", "dbgDataDoc", "dbgEspecialidadeDoc"].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) {
-                el.textContent = "-";
-                el.classList.remove("campo-vazio");
-            }
-        });
+        // Campo de busca limpo: reseta os cards para o estado vazio.
+        const dbgPacienteDoc = document.getElementById("dbgPacienteDoc");
+        const dbgOMAbrDoc = document.getElementById("dbgOMAbrDoc");
+        const dbgDataDoc = document.getElementById("dbgDataDoc");
+        const dbgEspecialidadeDoc = document.getElementById("dbgEspecialidadeDoc");
+
+        if (dbgPacienteDoc) dbgPacienteDoc.textContent = "-";
+        if (dbgOMAbrDoc) dbgOMAbrDoc.textContent = "-";
+        if (dbgDataDoc) dbgDataDoc.textContent = "-";
+        if (dbgEspecialidadeDoc) dbgEspecialidadeDoc.textContent = "-";
 
         const campoNome = document.getElementById("nomeArquivoGerado");
         if (campoNome) campoNome.value = "";
@@ -1085,14 +1668,6 @@ let pacienteExcluirModal = null;
 
 // 1. CONEXÃO COM A PASTA DO BANCO DE DADOS
 document.getElementById("btnConectarBanco")?.addEventListener("click", async () => {
-    // Defesa extra além do MÓDULO 23 (que já desabilita este botão em
-    // navegadores sem suporte): evita cair no catch genérico caso o
-    // botão seja acionado de outra forma (ex.: Enter/Espaço com foco nele).
-    if (typeof window.showDirectoryPicker !== "function") {
-        mostrarToast("Este navegador não suporta o Banco de Dados local. Use Google Chrome ou Microsoft Edge.", "erro");
-        return;
-    }
-
     try {
         // Abre o seletor de pastas nativo do sistema operacional.
         dirHandleBanco = await window.showDirectoryPicker({ mode: 'readwrite' });
@@ -1255,22 +1830,6 @@ function fecharModalExcluir() {
 }
 
 // 7. SALVAMENTO DE DADOS NA PASTA LOCAL
-
-/**
- * Calcula o nome da subpasta de um paciente a partir dos dados (mesma
- * regra usada dentro de executarSalvamentoBanco). Extraído à parte
- * para o fluxo de "SUBSTITUIR" (mais abaixo) poder comparar o nome da
- * pasta antiga com o da nova sem duplicar a fórmula.
- */
-function nomeDaPastaPaciente(dados, sufixoPasta = "") {
-    const pacienteLimpo = dados.paciente.replace(/[\/\\:*?"<>|]/g, "_");
-    let nomePasta = `${pacienteLimpo} - ${dados.omAbr} - ${dados.dataNomeArquivo}`;
-    if (sufixoPasta) {
-        nomePasta += ` ${sufixoPasta}`;
-    }
-    return nomePasta;
-}
-
 /**
  * Cria (ou reutiliza) uma subpasta para o paciente e grava dentro dela
  * o "dados.json" e os PDFs originais anexados nesta sessão.
@@ -1284,20 +1843,19 @@ async function executarSalvamentoBanco(dados, sufixoPasta = "", opcoes = {}) {
     try {
         // Remove caracteres proibidos em nomes de pasta/arquivo do sistema operacional.
         const pacienteLimpo = dados.paciente.replace(/[\/\\:*?"<>|]/g, "_");
-        const nomePasta = nomeDaPastaPaciente(dados, sufixoPasta);
+        let nomePasta = `${pacienteLimpo} - ${dados.omAbr} - ${dados.dataNomeArquivo}`;
+
+        if (sufixoPasta) {
+            nomePasta += ` ${sufixoPasta}`;
+        }
 
         const pastaHandle = await dirHandleBanco.getDirectoryHandle(nomePasta, { create: true });
 
-        // REVISÃO: os PDFs são gravados ANTES do dados.json (na ordem
-        // inversa da versão anterior) de propósito. Se a gravação de um
-        // PDF falhar no meio do caminho (permissão, espaço em disco,
-        // pendrive lento etc.), o dados.json — que é o que o sistema usa
-        // para listar/buscar pacientes — não chega a ser atualizado, e a
-        // pasta continua refletindo o último estado que realmente tinha
-        // os PDFs completos. Antes, o dados.json era escrito primeiro, o
-        // que deixava a pasta com nome e JSON "novos" mesmo quando os PDFs
-        // não tinham sido salvos de verdade — exatamente o sintoma
-        // relatado (JSON e nome da pasta atualizados, arquivos não).
+        const fileJson = await pastaHandle.getFileHandle("dados.json", { create: true });
+        const writerJson = await fileJson.createWritable();
+        await writerJson.write(JSON.stringify(dados, null, 4));
+        await writerJson.close();
+
         if (arquivoAgendamentoObj) {
             const f = await pastaHandle.getFileHandle(`Marcação - ${pacienteLimpo}.pdf`, { create: true });
             const w = await f.createWritable();
@@ -1310,11 +1868,6 @@ async function executarSalvamentoBanco(dados, sufixoPasta = "", opcoes = {}) {
             await w.write(arquivoSolicitacaoObj);
             await w.close();
         }
-
-        const fileJson = await pastaHandle.getFileHandle("dados.json", { create: true });
-        const writerJson = await fileJson.createWritable();
-        await writerJson.write(JSON.stringify(dados, null, 4));
-        await writerJson.close();
 
         if (avisar) mostrarToast("Dados salvos no banco com sucesso!", "sucesso");
         if (atualizarLista) await atualizarListaPacientesBanco();   // recarrega a lista para incluir o registro recém-salvo
@@ -1340,10 +1893,6 @@ document.getElementById("btnInserirBanco")?.addEventListener("click", async () =
         mostrarToast("Anexe os PDFs antes de salvar.", "aviso");
         return;
     }
-
-    // Avisa (sem bloquear o salvamento) se algum campo usado para
-    // localizar/organizar o paciente no banco não foi encontrado.
-    avisarCamposFaltantes(dadosNovos, ["paciente", "omAbr", "data", "especialidade", "medico"]);
 
     const existente = buscarPacienteExistentePorNome(dadosNovos.paciente);
 
@@ -1381,52 +1930,23 @@ document.addEventListener("click", async (e) => {
         fecharModalDuplicidade();
     }
 
-    // Modal Duplicidade - Substituir (grava o novo registro e só então
-    // apaga o antigo — ver nota logo abaixo sobre por que a ordem importa)
+    // Modal Duplicidade - Substituir (apaga o registro antigo e grava o novo no lugar)
     else if (btn.id === "btnModalSubstituir") {
         if (!pacienteExistenteModal || !pacienteNovoModal) return;
 
-        const dadosParaSalvar = pacienteNovoModal;
-        const nomePastaAntiga = pacienteExistenteModal._nomePasta;
-        fecharModalDuplicidade();
-
-        // REVISÃO: a versão anterior apagava a pasta antiga PRIMEIRO e só
-        // depois salvava a nova. Quando paciente/OM/data não mudam (o caso
-        // mais comum: reanexar PDFs corrigidos do mesmo atendimento), a
-        // pasta nova tem o MESMO NOME da que acabou de ser apagada — um
-        // "apaga e recria na hora" que, em pendrives e pastas sincronizadas
-        // (comuns neste sistema, que não usa servidor), podia deixar o
-        // segundo PDF gravado pela metade mesmo com o dados.json e a pasta
-        // já atualizados (o sintoma relatado). Também não conferia se o
-        // salvamento deu certo antes de avisar sucesso.
-        //
-        // Agora: salva o registro novo primeiro (sem avisar sozinho); só
-        // remove a pasta antiga depois de confirmado que deu certo, e só
-        // se o nome realmente mudou — se for o mesmo nome, o passo acima
-        // já sobrescreveu o dados.json e os PDFs no lugar, sem precisar
-        // apagar nada. Se o salvamento falhar, o registro antigo continua
-        // intacto em vez de ser perdido.
-        const sucesso = await executarSalvamentoBanco(dadosParaSalvar, "", { avisar: false, atualizarLista: false });
-
-        if (!sucesso) {
-            mostrarToast("Erro ao salvar o novo registro. Verifique as permissões da pasta. O registro antigo foi mantido.", "erro");
-            return;
-        }
-
-        const nomePastaNova = nomeDaPastaPaciente(dadosParaSalvar);
-        if (nomePastaAntiga && nomePastaAntiga !== nomePastaNova) {
-            try {
-                await dirHandleBanco.removeEntry(nomePastaAntiga, { recursive: true });
-            } catch (erro) {
-                console.error("Erro ao remover a pasta antiga após salvar a nova:", erro);
-                mostrarToast("Novo registro salvo, mas não foi possível remover a pasta antiga.", "aviso");
-                await atualizarListaPacientesBanco();
-                return;
+        try {
+            if (pacienteExistenteModal._nomePasta) {
+                await dirHandleBanco.removeEntry(pacienteExistenteModal._nomePasta, { recursive: true });
             }
-        }
 
-        await atualizarListaPacientesBanco();
-        mostrarToast("Registro antigo substituído com sucesso!", "sucesso");
+            const dadosParaSalvar = pacienteNovoModal;
+            fecharModalDuplicidade();
+            await executarSalvamentoBanco(dadosParaSalvar);
+            mostrarToast("Registro antigo substituído com sucesso!", "sucesso");
+        } catch (erro) {
+            console.error("Erro ao substituir paciente:", erro);
+            mostrarToast("Erro ao excluir o paciente antigo para substituição.", "erro");
+        }
     }
 
     // Modal Duplicidade - Salvar Ambos (mantém o antigo e cria uma pasta nova com sufixo "(Cópia NNNN)")
@@ -1496,14 +2016,6 @@ document.getElementById("copiarExcelBtn")?.addEventListener("click", async () =>
     if (!textoVisual) {
         mostrarToast("Não há dados para copiar. Anexe os PDFs ou selecione um paciente.", "aviso");
         return;
-    }
-
-    // Só avisa se a linha veio de uma extração de PDF/paciente do banco
-    // (ultimosDadosExcel preenchido). O campo é um <input> comum e pode
-    // ter sido digitado manualmente pelo usuário — nesse caso não faria
-    // sentido "avisar" sobre todos os campos como se estivessem faltando.
-    if (ultimosDadosExcel) {
-        avisarCamposFaltantes(ultimosDadosExcel, ["paciente", "omAbr", "data", "especialidade", "medico"]);
     }
 
     textoVisual = formatarDataAno2Digitos(textoVisual);
@@ -1596,10 +2108,7 @@ function limparPainelLME() {
     ];
     ids.forEach(id => {
         const el = document.getElementById(id);
-        if (el) {
-            el.textContent = "-";
-            el.classList.remove("campo-vazio");   // volta ao estado neutro (ainda não tentou extrair nada)
-        }
+        if (el) el.textContent = "-";
     });
 }
 
@@ -1628,6 +2137,7 @@ document.getElementById("btnLimparLme")?.addEventListener("click", () => {
 
     const campoResultado = document.getElementById("resultado");
     if (campoResultado) campoResultado.innerHTML = "";
+    localStorage.removeItem("automed_rascunhoResultado");   // ver MÓDULO 21, mais abaixo
 
     mostrarToast("Campos limpos. Pronto para uma nova consulta.", "sucesso");
 });
@@ -1687,10 +2197,7 @@ document.getElementById("btnLimparDoc")?.addEventListener("click", () => {
     ];
     idsPainelDoc.forEach(id => {
         const el = document.getElementById(id);
-        if (el) {
-            el.textContent = "-";
-            el.classList.remove("campo-vazio");
-        }
+        if (el) el.textContent = "-";
     });
 
     mostrarToast("Campos limpos. Pronto para uma nova consulta.", "sucesso");
@@ -1828,125 +2335,34 @@ document.getElementById("inputImportarBackup")?.addEventListener("change", async
 
 
 /* ============================================================
-   MÓDULO 21 — (removido) RASCUNHO AUTOMÁTICO DO RESULTADO GERADO
-   Este módulo salvava o texto do DIEx no localStorage a cada geração/
-   edição e o restaurava sozinho ao recarregar a página, avisando com
-   o toast "Um rascunho não copiado foi recuperado." Removido a
-   pedido: a funcionalidade não é desejada. A linha abaixo só limpa
-   uma eventual chave já salva no navegador por versões anteriores,
-   para o aviso não voltar a aparecer com dados antigos.
-   ============================================================ */
-localStorage.removeItem("automed_rascunhoResultado");
-
-
-/* ============================================================
-   MÓDULO 22 — VALIDAÇÃO DE CAMPOS ESSENCIAIS EXTRAÍDOS DO PDF
-   O que este bloco faz: (1) escapa texto antes de inserir como HTML,
-   protegendo contra um PDF com "<"/">" em algum campo; e (2) avisa —
-   sem bloquear — quando um campo importante não foi encontrado no
-   PDF, para o usuário perceber antes de gerar/copiar/salvar um
-   documento com dados incompletos. Usado pelos MÓDULOS 11, 12, 14 e
-   15.
+   MÓDULO 21 — RASCUNHO AUTOMÁTICO DO RESULTADO GERADO (PÁGINA LME)
+   O que este bloco faz: salva automaticamente, a cada geração ou
+   edição manual, uma cópia do texto do DIEx no localStorage. Se o
+   navegador fechar ou recarregar por acidente antes de copiar o
+   texto, ele é recuperado sozinho na próxima vez que a página abrir.
    ============================================================ */
 
-/**
- * Escapa caracteres especiais de HTML (&, <, >, ", ') em texto vindo de
- * fora do nosso controle (o conteúdo de um PDF) antes de ele ser
- * inserido via innerHTML em algum lugar da tela. Sem isso, um PDF cujo
- * texto contivesse algo como "<b>" ou "<img ...>" no nome do paciente,
- * no local, etc. seria interpretado como HTML de verdade em vez de
- * aparecer como texto simples.
- */
-function escaparHTML(texto) {
-    if (!texto) return "";
-    return String(texto)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-}
+const campoResultadoLme = document.getElementById("resultado");
 
-// Nome de cada campo do objeto "dados" (ver extrairDadosCompletos, em
-// logica.js) -> rótulo amigável mostrado no aviso ao usuário.
-const ROTULOS_CAMPOS_ESSENCIAIS = {
-    paciente: "Paciente",
-    medico: "Médico",
-    especialidade: "Especialidade",
-    data: "Data",
-    horario: "Horário",
-    local: "Local",
-    om: "OM Solicitante",
-    omAbr: "OM Abreviada"
-};
+if (campoResultadoLme) {
+    campoResultadoLme.addEventListener("input", () => {
+        localStorage.setItem("automed_rascunhoResultado", campoResultadoLme.innerHTML);
+    });
 
-/**
- * Devolve, para cada modelo de texto da página LME, quais campos do
- * objeto "dados" fazem parte do texto gerado — usado para não avisar
- * sobre um campo que aquele modelo específico nem usa (ex.: o modelo
- * "S2" não menciona horário/local, só o modelo "Agendamento" usa).
- */
-function camposEssenciaisPorModelo(modelo) {
-    if (modelo === "agendamento") {
-        return ["paciente", "medico", "especialidade", "data", "horario", "local"];
+    // Também salva logo após o botão "GERAR DIEx" preencher o campo.
+    document.getElementById("gerarBtn")?.addEventListener("click", () => {
+        // Pequeno atraso para rodar depois que o MÓDULO 11 já escreveu o resultado.
+        setTimeout(() => {
+            if (campoResultadoLme.innerHTML.trim()) {
+                localStorage.setItem("automed_rascunhoResultado", campoResultadoLme.innerHTML);
+            }
+        }, 0);
+    });
+
+    // Ao carregar a página, recupera um rascunho não copiado (se existir).
+    const rascunhoSalvo = localStorage.getItem("automed_rascunhoResultado");
+    if (rascunhoSalvo && rascunhoSalvo.trim() && !campoResultadoLme.innerHTML.trim()) {
+        campoResultadoLme.innerHTML = rascunhoSalvo;
+        mostrarToast("Um rascunho não copiado foi recuperado.", "aviso");
     }
-    // "s2" e "remessa" usam {OMABR}/{OM} e {DATA_MILITAR} (= data).
-    return ["paciente", "omAbr", "data"];
 }
-
-/** Devolve os rótulos dos campos de "camposParaChecar" que vieram vazios em "dados". */
-function listarCamposFaltantes(dados, camposParaChecar) {
-    if (!dados) return camposParaChecar.map(campo => ROTULOS_CAMPOS_ESSENCIAIS[campo] || campo);
-    return camposParaChecar
-        .filter(campo => !dados[campo])
-        .map(campo => ROTULOS_CAMPOS_ESSENCIAIS[campo] || campo);
-}
-
-/**
- * Mostra um toast de aviso (NÃO bloqueia a ação) listando quais campos
- * não foram encontrados no(s) PDF(s), para o usuário conferir/completar
- * manualmente antes de usar o documento gerado. Devolve a lista de
- * rótulos faltantes, caso quem chamou queira decidir algo com isso.
- */
-function avisarCamposFaltantes(dados, camposParaChecar) {
-    const faltando = listarCamposFaltantes(dados, camposParaChecar);
-    if (faltando.length > 0) {
-        mostrarToast(
-            `Atenção: não encontrei no PDF: ${faltando.join(", ")}. Confira o resultado antes de usar.`,
-            "aviso"
-        );
-    }
-    return faltando;
-}
-
-
-/* ============================================================
-   MÓDULO 23 — COMPATIBILIDADE DO NAVEGADOR COM O BANCO DE DADOS
-   O que este bloco faz: a aba BANCO depende da File System Access API
-   do navegador (window.showDirectoryPicker), disponível hoje só em
-   navegadores baseados em Chromium (Chrome, Edge) — não existe no
-   Firefox, por exemplo. Antes desta correção, tentar conectar num
-   navegador sem suporte caía num "Erro técnico ao conectar." genérico
-   (o catch do MÓDULO 14), sem explicar o motivo real. Agora o sistema
-   detecta a falta de suporte de antemão e explica em vez de falhar às
-   cegas — as outras abas (LME, DOC, EXCEL) continuam funcionando
-   normalmente, só o Banco de Dados depende disso.
-   ============================================================ */
-
-(function avisarCompatibilidadeBanco() {
-    if (typeof window.showDirectoryPicker === "function") return;   // navegador suportado: nada a fazer
-
-    const cartao = document.querySelector(".cartao-conexao");
-    if (cartao) {
-        const aviso = document.createElement("p");
-        aviso.className = "aviso-compatibilidade-banco";
-        aviso.textContent =
-            "Este navegador não suporta a função de Banco de Dados local " +
-            "(é necessário Google Chrome ou Microsoft Edge — não funciona no Firefox). " +
-            "As demais abas do AutoMed (LME, DOC, EXCEL) continuam funcionando normalmente.";
-        cartao.appendChild(aviso);
-    }
-
-    const btnConectar = document.getElementById("btnConectarBanco");
-    if (btnConectar) btnConectar.disabled = true;
-})();

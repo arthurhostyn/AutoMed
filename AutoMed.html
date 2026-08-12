@@ -8,11 +8,7 @@
     <link rel="icon" type="image/png" href="imagem do AutoMed.ico">
     <link rel="stylesheet" href="style.css">
 
-    <!-- pdf.js hospedado localmente (pasta vendor/pdfjs) em vez de vir de um
-         CDN externo: assim o AutoMed funciona mesmo sem internet ou em redes
-         restritas (ex.: rede do Exército), já que não depende de nenhum
-         servidor além dos arquivos deste mesmo diretório. -->
-    <script src="vendor/pdfjs/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 
 <body id="app">
@@ -371,7 +367,7 @@
 <footer id="footerSistema">
     <div class="rodapeEsquerda">
         <div class="info-versao">
-            <div class="versao">Versão 1.4.8</div>
+            <div class="versao">Versão 1.4.5</div>
             <div class="versaodata">Última Atualização 10/08/2026</div>
         </div>
     </div>
@@ -456,20 +452,13 @@
 </div>
 
 <!-- ============================================================
-     LÓGICA DO SISTEMA — comentada por módulos, dividida em dois
-     arquivos que compartilham o mesmo escopo global:
-       1) logica.js  → dicionários, formatadores e extratores de PDF
-                        (sem dependência de DOM/navegador — por isso
-                        também é usado pelos testes automatizados em
-                        tests/logica.test.js)
-       2) script.js  → todo o resto (telas, eventos, banco local etc.)
-     Carregados como <script> comum (sem type="module") de propósito:
+     LÓGICA DO SISTEMA (script.js) — comentada por módulos.
+     Carregado como <script> comum (sem type="module") de propósito:
      assim o sistema continua funcionando ao abrir o arquivo HTML
      diretamente do disco (duplo clique), sem precisar de um servidor
      local — módulos ES (type="module") são bloqueados pelo navegador
      nesse cenário.
      ============================================================ -->
-<script src="logica.js"></script>
 <script src="script.js"></script>
 
 </body>
