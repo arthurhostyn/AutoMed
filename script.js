@@ -20,7 +20,7 @@
    18. Nova consulta (botão "LIMPAR" das dropzones, todas as páginas)
    19. Estatísticas do banco de dados
    20. Backup do banco de dados (exportar / importar)
-   21. Rascunho automático do resultado gerado
+   21. (removido) Rascunho automático do resultado gerado
    22. Validação de campos essenciais extraídos do PDF
    23. Compatibilidade do navegador com o Banco de Dados local
 
@@ -1255,6 +1255,22 @@ function fecharModalExcluir() {
 }
 
 // 7. SALVAMENTO DE DADOS NA PASTA LOCAL
+
+/**
+ * Calcula o nome da subpasta de um paciente a partir dos dados (mesma
+ * regra usada dentro de executarSalvamentoBanco). Extraído à parte
+ * para o fluxo de "SUBSTITUIR" (mais abaixo) poder comparar o nome da
+ * pasta antiga com o da nova sem duplicar a fórmula.
+ */
+function nomeDaPastaPaciente(dados, sufixoPasta = "") {
+    const pacienteLimpo = dados.paciente.replace(/[\/\\:*?"<>|]/g, "_");
+    let nomePasta = `${pacienteLimpo} - ${dados.omAbr} - ${dados.dataNomeArquivo}`;
+    if (sufixoPasta) {
+        nomePasta += ` ${sufixoPasta}`;
+    }
+    return nomePasta;
+}
+
 /**
  * Cria (ou reutiliza) uma subpasta para o paciente e grava dentro dela
  * o "dados.json" e os PDFs originais anexados nesta sessão.
@@ -1268,19 +1284,20 @@ async function executarSalvamentoBanco(dados, sufixoPasta = "", opcoes = {}) {
     try {
         // Remove caracteres proibidos em nomes de pasta/arquivo do sistema operacional.
         const pacienteLimpo = dados.paciente.replace(/[\/\\:*?"<>|]/g, "_");
-        let nomePasta = `${pacienteLimpo} - ${dados.omAbr} - ${dados.dataNomeArquivo}`;
-
-        if (sufixoPasta) {
-            nomePasta += ` ${sufixoPasta}`;
-        }
+        const nomePasta = nomeDaPastaPaciente(dados, sufixoPasta);
 
         const pastaHandle = await dirHandleBanco.getDirectoryHandle(nomePasta, { create: true });
 
-        const fileJson = await pastaHandle.getFileHandle("dados.json", { create: true });
-        const writerJson = await fileJson.createWritable();
-        await writerJson.write(JSON.stringify(dados, null, 4));
-        await writerJson.close();
-
+        // REVISÃO: os PDFs são gravados ANTES do dados.json (na ordem
+        // inversa da versão anterior) de propósito. Se a gravação de um
+        // PDF falhar no meio do caminho (permissão, espaço em disco,
+        // pendrive lento etc.), o dados.json — que é o que o sistema usa
+        // para listar/buscar pacientes — não chega a ser atualizado, e a
+        // pasta continua refletindo o último estado que realmente tinha
+        // os PDFs completos. Antes, o dados.json era escrito primeiro, o
+        // que deixava a pasta com nome e JSON "novos" mesmo quando os PDFs
+        // não tinham sido salvos de verdade — exatamente o sintoma
+        // relatado (JSON e nome da pasta atualizados, arquivos não).
         if (arquivoAgendamentoObj) {
             const f = await pastaHandle.getFileHandle(`Marcação - ${pacienteLimpo}.pdf`, { create: true });
             const w = await f.createWritable();
@@ -1293,6 +1310,11 @@ async function executarSalvamentoBanco(dados, sufixoPasta = "", opcoes = {}) {
             await w.write(arquivoSolicitacaoObj);
             await w.close();
         }
+
+        const fileJson = await pastaHandle.getFileHandle("dados.json", { create: true });
+        const writerJson = await fileJson.createWritable();
+        await writerJson.write(JSON.stringify(dados, null, 4));
+        await writerJson.close();
 
         if (avisar) mostrarToast("Dados salvos no banco com sucesso!", "sucesso");
         if (atualizarLista) await atualizarListaPacientesBanco();   // recarrega a lista para incluir o registro recém-salvo
@@ -1359,23 +1381,52 @@ document.addEventListener("click", async (e) => {
         fecharModalDuplicidade();
     }
 
-    // Modal Duplicidade - Substituir (apaga o registro antigo e grava o novo no lugar)
+    // Modal Duplicidade - Substituir (grava o novo registro e só então
+    // apaga o antigo — ver nota logo abaixo sobre por que a ordem importa)
     else if (btn.id === "btnModalSubstituir") {
         if (!pacienteExistenteModal || !pacienteNovoModal) return;
 
-        try {
-            if (pacienteExistenteModal._nomePasta) {
-                await dirHandleBanco.removeEntry(pacienteExistenteModal._nomePasta, { recursive: true });
-            }
+        const dadosParaSalvar = pacienteNovoModal;
+        const nomePastaAntiga = pacienteExistenteModal._nomePasta;
+        fecharModalDuplicidade();
 
-            const dadosParaSalvar = pacienteNovoModal;
-            fecharModalDuplicidade();
-            await executarSalvamentoBanco(dadosParaSalvar);
-            mostrarToast("Registro antigo substituído com sucesso!", "sucesso");
-        } catch (erro) {
-            console.error("Erro ao substituir paciente:", erro);
-            mostrarToast("Erro ao excluir o paciente antigo para substituição.", "erro");
+        // REVISÃO: a versão anterior apagava a pasta antiga PRIMEIRO e só
+        // depois salvava a nova. Quando paciente/OM/data não mudam (o caso
+        // mais comum: reanexar PDFs corrigidos do mesmo atendimento), a
+        // pasta nova tem o MESMO NOME da que acabou de ser apagada — um
+        // "apaga e recria na hora" que, em pendrives e pastas sincronizadas
+        // (comuns neste sistema, que não usa servidor), podia deixar o
+        // segundo PDF gravado pela metade mesmo com o dados.json e a pasta
+        // já atualizados (o sintoma relatado). Também não conferia se o
+        // salvamento deu certo antes de avisar sucesso.
+        //
+        // Agora: salva o registro novo primeiro (sem avisar sozinho); só
+        // remove a pasta antiga depois de confirmado que deu certo, e só
+        // se o nome realmente mudou — se for o mesmo nome, o passo acima
+        // já sobrescreveu o dados.json e os PDFs no lugar, sem precisar
+        // apagar nada. Se o salvamento falhar, o registro antigo continua
+        // intacto em vez de ser perdido.
+        const sucesso = await executarSalvamentoBanco(dadosParaSalvar, "", { avisar: false, atualizarLista: false });
+
+        if (!sucesso) {
+            mostrarToast("Erro ao salvar o novo registro. Verifique as permissões da pasta. O registro antigo foi mantido.", "erro");
+            return;
         }
+
+        const nomePastaNova = nomeDaPastaPaciente(dadosParaSalvar);
+        if (nomePastaAntiga && nomePastaAntiga !== nomePastaNova) {
+            try {
+                await dirHandleBanco.removeEntry(nomePastaAntiga, { recursive: true });
+            } catch (erro) {
+                console.error("Erro ao remover a pasta antiga após salvar a nova:", erro);
+                mostrarToast("Novo registro salvo, mas não foi possível remover a pasta antiga.", "aviso");
+                await atualizarListaPacientesBanco();
+                return;
+            }
+        }
+
+        await atualizarListaPacientesBanco();
+        mostrarToast("Registro antigo substituído com sucesso!", "sucesso");
     }
 
     // Modal Duplicidade - Salvar Ambos (mantém o antigo e cria uma pasta nova com sufixo "(Cópia NNNN)")
@@ -1577,7 +1628,6 @@ document.getElementById("btnLimparLme")?.addEventListener("click", () => {
 
     const campoResultado = document.getElementById("resultado");
     if (campoResultado) campoResultado.innerHTML = "";
-    localStorage.removeItem("automed_rascunhoResultado");   // ver MÓDULO 21, mais abaixo
 
     mostrarToast("Campos limpos. Pronto para uma nova consulta.", "sucesso");
 });
@@ -1778,37 +1828,15 @@ document.getElementById("inputImportarBackup")?.addEventListener("change", async
 
 
 /* ============================================================
-   MÓDULO 21 — RASCUNHO AUTOMÁTICO DO RESULTADO GERADO (PÁGINA LME)
-   O que este bloco faz: salva automaticamente, a cada geração ou
-   edição manual, uma cópia do texto do DIEx no localStorage. Se o
-   navegador fechar ou recarregar por acidente antes de copiar o
-   texto, ele é recuperado sozinho na próxima vez que a página abrir.
+   MÓDULO 21 — (removido) RASCUNHO AUTOMÁTICO DO RESULTADO GERADO
+   Este módulo salvava o texto do DIEx no localStorage a cada geração/
+   edição e o restaurava sozinho ao recarregar a página, avisando com
+   o toast "Um rascunho não copiado foi recuperado." Removido a
+   pedido: a funcionalidade não é desejada. A linha abaixo só limpa
+   uma eventual chave já salva no navegador por versões anteriores,
+   para o aviso não voltar a aparecer com dados antigos.
    ============================================================ */
-
-const campoResultadoLme = document.getElementById("resultado");
-
-if (campoResultadoLme) {
-    campoResultadoLme.addEventListener("input", () => {
-        localStorage.setItem("automed_rascunhoResultado", campoResultadoLme.innerHTML);
-    });
-
-    // Também salva logo após o botão "GERAR DIEx" preencher o campo.
-    document.getElementById("gerarBtn")?.addEventListener("click", () => {
-        // Pequeno atraso para rodar depois que o MÓDULO 11 já escreveu o resultado.
-        setTimeout(() => {
-            if (campoResultadoLme.innerHTML.trim()) {
-                localStorage.setItem("automed_rascunhoResultado", campoResultadoLme.innerHTML);
-            }
-        }, 0);
-    });
-
-    // Ao carregar a página, recupera um rascunho não copiado (se existir).
-    const rascunhoSalvo = localStorage.getItem("automed_rascunhoResultado");
-    if (rascunhoSalvo && rascunhoSalvo.trim() && !campoResultadoLme.innerHTML.trim()) {
-        campoResultadoLme.innerHTML = rascunhoSalvo;
-        mostrarToast("Um rascunho não copiado foi recuperado.", "aviso");
-    }
-}
+localStorage.removeItem("automed_rascunhoResultado");
 
 
 /* ============================================================
