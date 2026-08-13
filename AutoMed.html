@@ -334,45 +334,62 @@
     <div class="container">
         <h1>GERENCIADOR DO BANCO DE DADOS</h1>
 
-        <div class="cartao-conexao">
-            <p>Selecione a pasta no seu computador onde os dados dos pacientes serão armazenados.</p>
-            <div id="statusBanco" class="status-banco-grande">DESCONECTADO</div>
-            <button id="btnConectarBanco" class="btn-conectar-central">CONECTAR PASTA DO BANCO</button>
-
-            <!-- FUNCIONALIDADE NOVA: backup do banco em um único arquivo .json,
-                 para não depender só da pasta local (pen drive, nuvem, etc.). -->
-            <button id="btnExportarBackup" type="button">EXPORTAR BACKUP (.JSON)</button>
-            <button id="btnImportarBackup" type="button">IMPORTAR BACKUP (.JSON)</button>
-            <input type="file" id="inputImportarBackup" accept=".json">
-        </div>
-
-        <!-- FUNCIONALIDADE NOVA: resumo do banco conectado (total de
-             pacientes, OMs e especialidades mais frequentes). Some quando
-             não há pacientes e reaparece sozinho ao conectar/atualizar. -->
-        <div id="estatisticasBanco" class="info-banco oculto">
-            <p><strong>Total de pacientes cadastrados:</strong> <span id="statTotalPacientes">0</span></p>
-            <p><strong>OMs mais frequentes:</strong> <span id="statTopOMs">-</span></p>
-            <p><strong>Especialidades mais frequentes:</strong> <span id="statTopEspecialidades">-</span></p>
-        </div>
-
         <!-- ============================================================
-             VISUALIZADOR DE REGISTROS (v1.5.0)
-             Reaproveita a mesma estrutura das áreas de anexo das outras
-             páginas (barra + conteúdo recolhível), por isso as classes
-             "area-dropzones" e "conteudo-dropzones" aparecem aqui: é o
-             mesmo comportamento de recolher, com o estado lembrado no
-             localStorage pela função configurarToggleDropzone (MÓDULO 9
-             do script.js). O conteúdo em si é montado pelo MÓDULO 22.
+             VISUALIZADOR DE REGISTROS (v1.5.3) — BLOCO FIXO
+             É o conteúdo principal da página e por isso vem primeiro e
+             NÃO recolhe: a barra "BANCO DE DADOS" é apenas um título
+             (classe "barra-fixa"), sem seta e sem clique. Quem recolhe
+             agora é o bloco de CONEXÃO, mais abaixo.
+             O conteúdo da lista em si é montado pelo MÓDULO 22 do
+             script.js.
              ============================================================ -->
-        <div class="area-dropzones area-registros" id="areaRegistrosBanco">
+        <div class="area-registros" id="areaRegistrosBanco">
             <div class="linha-barra-dropzone">
-                <div class="barra-dropzone-header" id="headerRegistrosBanco">
+                <div class="barra-dropzone-header barra-fixa">
                     <span class="label-dropzone">BANCO DE DADOS</span>
-                    <button type="button" id="toggleRegistrosBanco" class="toggleDropzone" title="Recolher / Expandir registros" aria-label="Recolher ou expandir a lista de registros"><span class="icone-toggle-dropzone">▼</span></button>
                 </div>
             </div>
 
-            <div class="conteudo-dropzones conteudo-registros">
+            <div class="conteudo-registros">
+                <!-- RESUMO DO BANCO (v1.5.3)
+                     Antes era um cartão solto acima da lista. Agora é a
+                     PRIMEIRA LINHA do próprio banco, na mesma sanfona das
+                     linhas de paciente: fechada mostra só os totais em uma
+                     linha; aberta mostra os detalhes. Fica escondida
+                     enquanto não houver nenhum paciente salvo (MÓDULO 19). -->
+                <div id="estatisticasBanco" class="registro-item registro-item-resumo oculto">
+                    <button type="button" id="cabecalhoResumoBanco" class="registro-cabecalho" aria-expanded="false" aria-controls="corpoResumoBanco" title="Clique para abrir o resumo do banco">
+                        <span class="registro-col registro-col-paciente">RESUMO DO BANCO</span>
+                        <span class="registro-col registro-col-secundaria" id="statResumoPacientes">-</span>
+                        <span class="registro-col registro-col-secundaria" id="statResumoOMs">-</span>
+                        <span class="registro-col registro-col-secundaria" id="statResumoEspecialidades">-</span>
+                        <span class="registro-seta">▼</span>
+                    </button>
+
+                    <div id="corpoResumoBanco" class="registro-corpo oculto">
+                        <div class="registro-subtitulo">RESUMO DO BANCO CONECTADO</div>
+
+                        <div class="registro-campos">
+                            <!-- Os rótulos aqui não usam "for": os valores são
+                                 texto fixo (<div>), e não campos digitáveis como
+                                 nos cartões de paciente — "for" só vale apontando
+                                 para um campo de formulário. -->
+                            <div class="campo-registro">
+                                <label>Total de pacientes cadastrados</label>
+                                <div class="valor-resumo" id="statTotalPacientes">0</div>
+                            </div>
+                            <div class="campo-registro">
+                                <label>OMs mais frequentes</label>
+                                <div class="valor-resumo" id="statTopOMs">-</div>
+                            </div>
+                            <div class="campo-registro">
+                                <label>Especialidades mais frequentes</label>
+                                <div class="valor-resumo" id="statTopEspecialidades">-</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="barra-busca-registros">
                     <input type="text" id="inputBuscaRegistros" class="campo-busca-registros" placeholder="Pesquisar por paciente, OM, especialidade ou data..." autocomplete="off">
                     <button type="button" id="btnAtualizarRegistros" class="btn-registro" title="Relê a pasta do banco no disco">ATUALIZAR</button>
@@ -387,8 +404,41 @@
             </div>
         </div>
 
-        <div class="info-banco">
-            <p><strong>Atenção:</strong> O navegador solicita permissão toda vez que o sistema é recarregado por questões de segurança.</p>
+        <!-- ============================================================
+             CONEXÃO DO BANCO (v1.5.3) — BLOCO RECOLHÍVEL
+             Passou para o fim da página e ganhou a mesma barra recolhível
+             das áreas de anexo das outras páginas (por isso as classes
+             "area-dropzones" e "conteudo-dropzones"), com o estado
+             lembrado no localStorage pela função configurarToggleDropzone
+             (MÓDULO 9 do script.js). Começa expandido: o navegador pede
+             a permissão da pasta a cada recarga, então o botão CONECTAR
+             precisa estar à mão na primeira vez.
+             ============================================================ -->
+        <div class="area-dropzones area-conexao" id="areaConexaoBanco">
+            <div class="linha-barra-dropzone">
+                <div class="barra-dropzone-header" id="headerConexaoBanco">
+                    <span class="label-dropzone">CONEXÃO DO BANCO</span>
+                    <button type="button" id="toggleConexaoBanco" class="toggleDropzone" title="Recolher / Expandir a conexão do banco" aria-label="Recolher ou expandir a área de conexão do banco"><span class="icone-toggle-dropzone">▼</span></button>
+                </div>
+            </div>
+
+            <div class="conteudo-dropzones conteudo-conexao">
+                <div class="cartao-conexao">
+                    <p>Selecione a pasta no seu computador onde os dados dos pacientes serão armazenados.</p>
+                    <div id="statusBanco" class="status-banco-grande">DESCONECTADO</div>
+                    <button id="btnConectarBanco" class="btn-conectar-central">CONECTAR PASTA DO BANCO</button>
+
+                    <!-- FUNCIONALIDADE NOVA: backup do banco em um único arquivo .json,
+                         para não depender só da pasta local (pen drive, nuvem, etc.). -->
+                    <button id="btnExportarBackup" type="button">EXPORTAR BACKUP (.JSON)</button>
+                    <button id="btnImportarBackup" type="button">IMPORTAR BACKUP (.JSON)</button>
+                    <input type="file" id="inputImportarBackup" accept=".json">
+                </div>
+
+                <div class="info-banco">
+                    <p><strong>Atenção:</strong> O navegador solicita permissão toda vez que o sistema é recarregado por questões de segurança.</p>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -413,7 +463,7 @@
 <footer id="footerSistema">
     <div class="rodapeEsquerda">
         <div class="info-versao">
-            <div class="versao">Versão 1.5.2</div>
+            <div class="versao">Versão 1.5.3</div>
             <div class="versaodata">Última Atualização 13/08/2026</div>
         </div>
     </div>

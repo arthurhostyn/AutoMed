@@ -296,6 +296,19 @@ h3 {
     background: #1d2911;
 }
 
+/* Variante FIXA da barra (v1.5.3): mesmo desenho, mas sem seta e sem
+   clique — serve só de título de uma seção que não recolhe, como o
+   "BANCO DE DADOS" da página BANCO. Sem isso a barra continuaria com a
+   mãozinha do mouse e escurecendo no hover, prometendo um clique que
+   não existe. */
+.barra-dropzone-header.barra-fixa {
+    cursor: default;
+}
+
+.barra-dropzone-header.barra-fixa:hover {
+    background: #283618;
+}
+
 /* Rótulo "ANEXAR PDF'S": NUNCA se move. Ele se ancora na linha inteira
    (".linha-barra-dropzone", de largura fixa), e não na barra — que muda
    de largura ao recolher. Assim ele fica no mesmo ponto nos dois
@@ -1144,6 +1157,25 @@ footer.recolhido #toggleAbas:hover {
     margin-left: auto;
     margin-right: auto;
 }
+
+/* ------------------------------------------------------------
+   BLOCO RECOLHÍVEL DE CONEXÃO (v1.5.3)
+   O cartão de conexão desceu para o fim da página e passou a recolher,
+   usando a mesma barra das áreas de anexo (MÓDULO 4). Só faltava o
+   teto da animação: ".conteudo-dropzones" limita a 250px, altura
+   pensada para duas dropzones e curta demais para este cartão (status,
+   três botões e o aviso de permissão). O seletor abaixo tem duas
+   classes justamente para vencer aquele limite sem precisar de
+   "!important" — o estado recolhido continua valendo, pois lá o
+   "max-height: 0" já é "!important".
+   ------------------------------------------------------------ */
+.area-conexao {
+    margin-bottom: 20px;
+}
+
+.area-conexao .conteudo-conexao {
+    max-height: 900px;
+}
 /* ============================================================
    MÓDULO 10 — MENSAGENS FLUTUANTES (TOASTS)
    O que este arquivo faz: estiliza as notificações que aparecem no
@@ -1381,20 +1413,38 @@ footer.recolhido #toggleAbas:hover {
    ============================================================ */
 
 /* A página BANCO centraliza tudo (ver MÓDULO 9); aqui o conteúdo
-   volta a ser alinhado à esquerda, como nas demais páginas. */
+   volta a ser alinhado à esquerda, como nas demais páginas.
+
+   REVISÃO (v1.5.3): este bloco passou a ser o PRIMEIRO da página e não
+   recolhe mais — por isso perdeu a classe ".area-dropzones" no HTML e
+   ganhou a margem inferior própria abaixo. O antigo teto de 900px em
+   ".conteudo-registros" (que existia só para animar o recolher) saiu
+   junto: sem ele a lista nunca corre risco de ficar cortada, e quem
+   controla a altura real continua sendo ".lista-registros". */
 .area-registros {
     text-align: left;
-    margin-top: 30px;
+    margin-bottom: 20px;
 }
 
-/* O conteúdo recolhível padrão do sistema tem altura máxima de 250px
-   (suficiente para duas dropzones). A lista de registros precisa de
-   bem mais — o valor abaixo só serve de teto para a animação de
-   abrir/fechar; quem controla a altura real é ".lista-registros". */
-.area-registros .conteudo-registros {
-    max-height: 900px;
-    transition: max-height 0.45s cubic-bezier(0.4, 0, 0.2, 1),
-                opacity 0.25s ease-in-out;
+/* ------------------------------------------------------------
+   RESUMO DO BANCO (primeira linha da lista)
+   Reaproveita inteiramente o visual das linhas de paciente
+   (".registro-item" / ".registro-cabecalho" / ".registro-corpo"):
+   fechado é uma linha só com os totais; aberto mostra os detalhes.
+   ------------------------------------------------------------ */
+.registro-item-resumo {
+    margin-bottom: 10px;
+}
+
+/* Nos cartões de paciente cada campo é um <input> editável; aqui os
+   valores são apenas texto, então repetem a mesma métrica do input
+   para que as duas caixas fiquem idênticas. */
+.valor-resumo {
+    color: black;
+    font-size: 13px;
+    padding: 2px 0;
+    border-bottom: 1px solid #b9c4a1;
+    word-break: break-word;
 }
 
 /* ------------------------------------------------------------
@@ -1583,8 +1633,18 @@ footer.recolhido #toggleAbas:hover {
 /* ------------------------------------------------------------
    CORPO DO CARTÃO ABERTO
    ------------------------------------------------------------ */
+/* REVISÃO (v1.5.3): o corpo aberto usava a MESMA borda tracejada clara
+   (3px dashed #c7d59f) da caixa que envolve a lista inteira
+   (".lista-registros"). Com o cartão aberto, as duas linhas tracejadas
+   ficavam quase encostadas e com o mesmo desenho, e não dava mais para
+   distinguir onde terminava o paciente e onde terminava a lista.
+
+   Agora a moldura é SÓLIDA e usa exatamente a cor da barra fechada do
+   paciente (#283618): o corpo aberto passa a ler como uma extensão da
+   própria barra — um cartão único — e nada mais no bloco repete o
+   tracejado claro da caixa externa. */
 .registro-corpo {
-    border: 3px dashed #c7d59f;
+    border: 3px solid #283618;
     border-top: none;
     padding: 15px;
     background: #353d1a99;

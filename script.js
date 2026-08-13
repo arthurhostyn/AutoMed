@@ -2401,6 +2401,11 @@ function principaisOcorrencias(mapaContagem, n = 3) {
         .join(", ");
 }
 
+/** Concorda o número com a palavra ("1 paciente" / "12 pacientes"). */
+function contagemPorExtenso(quantidade, singular, plural) {
+    return `${quantidade} ${quantidade === 1 ? singular : plural}`;
+}
+
 function atualizarEstatisticasBanco() {
     const painel = document.getElementById("estatisticasBanco");
     if (!painel) return;
@@ -2421,6 +2426,18 @@ function atualizarEstatisticasBanco() {
         contagemOM.set(om, (contagemOM.get(om) || 0) + 1);
         contagemEspecialidade.set(especialidade, (contagemEspecialidade.get(especialidade) || 0) + 1);
     }
+
+    // REVISÃO (v1.5.3): o resumo deixou de ser um cartão solto e virou a
+    // primeira LINHA do banco (ver o HTML da página BANCO). São dois
+    // níveis de informação agora: a linha fechada mostra só os totais,
+    // uma por coluna, seguindo a mesma divisão das linhas de paciente
+    // logo abaixo; o corpo aberto mostra o detalhamento.
+    document.getElementById("statResumoPacientes").textContent =
+        contagemPorExtenso(total, "paciente", "pacientes");
+    document.getElementById("statResumoOMs").textContent =
+        contagemPorExtenso(contagemOM.size, "OM", "OMs");
+    document.getElementById("statResumoEspecialidades").textContent =
+        contagemPorExtenso(contagemEspecialidade.size, "especialidade", "especialidades");
 
     document.getElementById("statTotalPacientes").textContent = total;
     document.getElementById("statTopOMs").textContent = principaisOcorrencias(contagemOM) || "-";
@@ -3369,14 +3386,56 @@ document.getElementById("btnAtualizarRegistros")?.addEventListener("click", asyn
     mostrarToast("Lista relida da pasta.", "sucesso");
 });
 
-// A área começa recolhida na primeira vez que o sistema é aberto; daí
-// em diante vale a escolha do usuário, guardada no localStorage pela
-// mesma função usada nas dropzones das outras páginas (MÓDULO 9).
-const areaRegistrosBanco = document.getElementById("areaRegistrosBanco");
-if (areaRegistrosBanco && localStorage.getItem("automed_registrosBancoRecolhido") === null) {
-    areaRegistrosBanco.classList.add("recolhido");
+// REVISÃO (v1.5.3): a LISTA não recolhe mais — é o conteúdo principal da
+// página e agora fica sempre aberta, no topo (a barra "BANCO DE DADOS"
+// virou só um título, sem seta). Quem recolhe agora é o bloco de CONEXÃO,
+// que desceu para o fim da página, usando a mesma função das dropzones
+// das outras páginas (MÓDULO 9).
+//
+// Sem nada salvo no localStorage, "configurarToggleDropzone" deixa o
+// bloco EXPANDIDO — que é o desejado na primeira abertura, já que o
+// navegador pede a permissão da pasta a cada recarga e o botão CONECTAR
+// precisa estar à mão. Daí em diante vale a escolha do usuário.
+configurarToggleDropzone("headerConexaoBanco", "areaConexaoBanco", "automed_conexaoBancoRecolhido");
+
+
+// ------------------------------------------------------------------
+// 11. RESUMO DO BANCO (primeira linha da lista)
+// ------------------------------------------------------------------
+
+/**
+ * Abre/fecha a linha de resumo do banco, reaproveitando as mesmas classes
+ * das linhas de paciente ("aberto" gira a seta e escurece a barra).
+ *
+ * Há uma diferença importante em relação aos cartões de paciente: o corpo
+ * do resumo é fixo no HTML e apenas some/reaparece, enquanto o corpo de um
+ * paciente é construído e destruído a cada abertura (ver abrirRegistro e
+ * fecharRegistroAberto). Por isso o resumo fica FORA de
+ * "#listaRegistrosBanco": não é filtrado pela busca, não entra no
+ * redesenho da lista e não passa pelo controle de "edição não salva".
+ */
+function alternarResumoBanco(abrir) {
+    const item = document.getElementById("estatisticasBanco");
+    const corpo = document.getElementById("corpoResumoBanco");
+    const cabecalho = document.getElementById("cabecalhoResumoBanco");
+
+    if (!item || !corpo || !cabecalho) return;
+
+    item.classList.toggle("aberto", abrir);
+    corpo.classList.toggle("oculto", !abrir);
+    cabecalho.setAttribute("aria-expanded", String(abrir));
+
+    localStorage.setItem("automed_resumoBancoAberto", abrir);
 }
-configurarToggleDropzone("headerRegistrosBanco", "areaRegistrosBanco", "automed_registrosBancoRecolhido");
+
+document.getElementById("cabecalhoResumoBanco")?.addEventListener("click", () => {
+    const estaAberto = document.getElementById("estatisticasBanco")?.classList.contains("aberto");
+    alternarResumoBanco(!estaAberto);
+});
+
+// Restaura a escolha da última vez. Na primeira abertura fica FECHADO,
+// para o resumo ocupar uma linha só e não empurrar a lista para baixo.
+alternarResumoBanco(localStorage.getItem("automed_resumoBancoAberto") === "true");
 
 // Monta as listas de sugestão e desenha o estado inicial (normalmente
 // a mensagem "conecte a pasta do banco").
