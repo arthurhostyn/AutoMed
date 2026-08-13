@@ -296,19 +296,6 @@ h3 {
     background: #1d2911;
 }
 
-/* Variante FIXA da barra (v1.5.3): mesmo desenho, mas sem seta e sem
-   clique — serve só de título de uma seção que não recolhe, como o
-   "BANCO DE DADOS" da página BANCO. Sem isso a barra continuaria com a
-   mãozinha do mouse e escurecendo no hover, prometendo um clique que
-   não existe. */
-.barra-dropzone-header.barra-fixa {
-    cursor: default;
-}
-
-.barra-dropzone-header.barra-fixa:hover {
-    background: #283618;
-}
-
 /* Rótulo "ANEXAR PDF'S": NUNCA se move. Ele se ancora na linha inteira
    (".linha-barra-dropzone", de largura fixa), e não na barra — que muda
    de largura ao recolher. Assim ele fica no mesmo ponto nos dois
@@ -1096,10 +1083,24 @@ footer.recolhido #toggleAbas:hover {
     background: #1d2911;
 }
 
-/* PÁGINA "GERENCIADOR DO BANCO DE DADOS" */
+/* PÁGINA "GERENCIADOR DO BANCO DE DADOS"
+
+   O "min-height" é a mesma técnica já usada nas páginas EXCEL e DOC
+   (ver MÓDULO 6 e MÓDULO 7) e existe pelo mesmo motivo: o brasão de
+   fundo é desenhado dentro do container (".container::before", MÓDULO
+   2), que se estica do topo à base DELE. Se o container ficar mais
+   curto que o brasão, a imagem é cortada na base.
+
+   Com "background-size: 620px" o brasão sai com 465px de altura e
+   começa 20px acima do topo, ou seja, sua base fica a 445px. Antes
+   isso passava despercebido porque a página era sempre alta; agora,
+   com o bloco de CONEXÃO recolhido, ela encurta para cerca de 290px e
+   o brasão aparecia cortado ao meio. Os 600px abaixo cobrem os 445px
+   do desenho e ainda deixam uma folga embaixo. */
 #pagina-banco .container {
     display: block;
     text-align: center;
+    min-height: 600px;
 }
 
 .conteudo-central-banco {
