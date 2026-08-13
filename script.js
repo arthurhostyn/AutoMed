@@ -23,6 +23,7 @@
    19. Estatísticas do banco de dados
    20. Backup do banco de dados (exportar / importar)
    21. Rascunho automático do resultado gerado
+   22. Visualizador de registros do banco (página BANCO)
 
    Este arquivo é carregado como um <script> comum (sem
    type="module") de propósito: assim o sistema continua
@@ -140,8 +141,17 @@ let textoComissaoEtica = "";    // texto do PDF do parecer da comissão
 let arquivoRenomear = null;
 
 // --- Banco de Dados Local ---
-let arquivoAgendamentoObj = null;      // File original de Agendamento (para salvar no banco)
-let arquivoSolicitacaoObj = null;      // File original de Solicitação (para salvar no banco)
+// CORREÇÃO (v1.5.0): estas duas variáveis guardavam o objeto "File" do
+// PDF anexado, que é apenas um ATALHO para o arquivo no disco — não o
+// conteúdo dele. Esse atalho vence: se o arquivo for movido, renomeado,
+// apagado ou estiver aberto em outro programa, gravá-lo no banco falha.
+// Era exatamente o que acontecia ao SUBSTITUIR um paciente cujo PDF
+// tinha sido arrastado de dentro da própria pasta do banco: o botão
+// apagava a pasta antiga e, junto com ela, o arquivo que ainda seria
+// gravado. Agora guardamos { nome, bytes } — os bytes já lidos para a
+// memória no momento do anexo, independentes do que ocorra no disco.
+let arquivoAgendamentoObj = null;      // { nome, bytes } do PDF de Agendamento
+let arquivoSolicitacaoObj = null;      // { nome, bytes } do PDF de Solicitação
 let dirHandleBanco = null;             // referência à pasta do banco escolhida pelo usuário
 let dadosBancoCarregados = null;       // dados de um paciente já salvo, quando selecionado na busca
 let mapaPacientesBanco = new Map();    // índice "identificador -> dados" de todos os pacientes salvos
@@ -827,8 +837,11 @@ function extrairDadosComissaoEtica(texto) {
  * @param {string} idElementoNome - id do elemento onde exibir o nome do arquivo.
  * @param {(texto:string)=>void} aoConcluir - chamado com o texto lido, quando pronto.
  * @param {string} mensagemErro - mensagem exibida em um toast caso a leitura falhe.
+ * @param {(conteudo:{nome:string, bytes:ArrayBuffer})=>void} [aoCapturarBytes] -
+ *        recebe uma CÓPIA independente do conteúdo do arquivo, para quem
+ *        precisar gravá-lo depois (ver MÓDULO 14 — banco de dados).
  */
-function lerTextoDePDF(file, idElementoNome, aoConcluir, mensagemErro) {
+function lerTextoDePDF(file, idElementoNome, aoConcluir, mensagemErro, aoCapturarBytes) {
     // Mostra o nome do arquivo imediatamente, antes mesmo da leitura terminar
     // (feedback visual rápido para o usuário).
     document.getElementById(idElementoNome).textContent = file.name;
@@ -838,6 +851,15 @@ function lerTextoDePDF(file, idElementoNome, aoConcluir, mensagemErro) {
     // Executa quando o arquivo termina de ser carregado em memória.
     reader.onload = async function () {
         try {
+            // CORREÇÃO (v1.5.0): a cópia dos bytes é feita ANTES de entregar
+            // o arquivo ao pdf.js. A biblioteca "transfere" o bloco de
+            // memória para o seu worker interno, e depois disso o original
+            // fica inutilizável — por isso a cópia (slice) precisa vir
+            // primeiro. É essa cópia que será gravada no banco.
+            if (typeof aoCapturarBytes === "function") {
+                aoCapturarBytes({ nome: file.name, bytes: this.result.slice(0) });
+            }
+
             const typedarray = new Uint8Array(this.result);
             const pdf = await pdfjsLib.getDocument(typedarray).promise;
             let texto = "";
@@ -874,7 +896,7 @@ function lerTextoDePDF(file, idElementoNome, aoConcluir, mensagemErro) {
 // --- Página LME ---
 
 function lerPDF(file) {
-    arquivoAgendamentoObj = file;
+    arquivoAgendamentoObj = null;   // só volta a valer quando os bytes forem lidos, logo abaixo
     dadosBancoCarregados = null;   // um novo PDF anexado invalida o paciente carregado do banco
 
     lerTextoDePDF(
@@ -884,12 +906,13 @@ function lerPDF(file) {
             textoPDF = texto;
             atualizarPainelLME();
         },
-        "Erro ao ler o PDF."
+        "Erro ao ler o PDF.",
+        conteudo => { arquivoAgendamentoObj = conteudo; }
     );
 }
 
 function lerPDFSolicitacao(file) {
-    arquivoSolicitacaoObj = file;
+    arquivoSolicitacaoObj = null;   // idem: preenchido ao terminar a leitura
     dadosBancoCarregados = null;
 
     lerTextoDePDF(
@@ -899,7 +922,8 @@ function lerPDFSolicitacao(file) {
             textoPDFSolicitacao = texto;
             atualizarPainelLME();
         },
-        "Erro ao ler PDF de solicitação."
+        "Erro ao ler PDF de solicitação.",
+        conteudo => { arquivoSolicitacaoObj = conteudo; }
     );
 }
 
@@ -1739,6 +1763,12 @@ async function atualizarListaPacientesBanco() {
     // FUNCIONALIDADE NOVA: recalcula o resumo estatístico sempre que a
     // lista de pacientes é recarregada (ver MÓDULO 19, mais abaixo).
     atualizarEstatisticasBanco();
+
+    // v1.5.0: redesenha a lista visual de registros da página BANCO
+    // (ver MÓDULO 22). Fica aqui, e não em cada botão, para que QUALQUER
+    // mudança no banco — conectar, salvar, excluir, importar backup —
+    // apareça na tela sem ninguém precisar lembrar de atualizar.
+    renderizarRegistrosBanco();
 }
 
 // 3. SELEÇÃO DE PACIENTE PELA BARRA DE PESQUISA DO BANCO (página LME)
@@ -1830,53 +1860,167 @@ function fecharModalExcluir() {
 }
 
 // 7. SALVAMENTO DE DADOS NA PASTA LOCAL
+
+/** Troca por "_" os caracteres que o Windows não aceita em nome de pasta/arquivo. */
+function sanitizarNomePasta(texto) {
+    return (texto || "").replace(/[\/\\:*?"<>|]/g, "_");
+}
+
 /**
- * Cria (ou reutiliza) uma subpasta para o paciente e grava dentro dela
- * o "dados.json" e os PDFs originais anexados nesta sessão.
- * @param {string} sufixoPasta - texto extra no nome da pasta, usado para não colidir ao "Salvar Ambos".
- * @param {{avisar?: boolean, atualizarLista?: boolean}} opcoes - permite
- *        salvar em lote (ver MÓDULO 20 — importar backup) sem disparar um
- *        toast e sem revarrer a pasta inteira a cada item importado.
+ * Monta o nome padronizado da pasta de um paciente
+ * ("PACIENTE - OM - DATA"). Existe como função própria porque três
+ * lugares diferentes precisam chegar EXATAMENTE ao mesmo nome:
+ * salvar, substituir e renomear ao editar (MÓDULO 22).
  */
-async function executarSalvamentoBanco(dados, sufixoPasta = "", opcoes = {}) {
-    const { avisar = true, atualizarLista = true } = opcoes;
+function montarNomePastaPaciente(dados, sufixoPasta = "") {
+    let nomePasta = `${sanitizarNomePasta(dados.paciente)} - ${dados.omAbr} - ${dados.dataNomeArquivo}`;
+    if (sufixoPasta) nomePasta += ` ${sufixoPasta}`;
+    return nomePasta;
+}
+
+/** Descobre se um arquivo já existe dentro de uma pasta, sem criá-lo. */
+async function arquivoExisteNaPasta(pastaHandle, nomeArquivo) {
     try {
-        // Remove caracteres proibidos em nomes de pasta/arquivo do sistema operacional.
-        const pacienteLimpo = dados.paciente.replace(/[\/\\:*?"<>|]/g, "_");
-        let nomePasta = `${pacienteLimpo} - ${dados.omAbr} - ${dados.dataNomeArquivo}`;
-
-        if (sufixoPasta) {
-            nomePasta += ` ${sufixoPasta}`;
-        }
-
-        const pastaHandle = await dirHandleBanco.getDirectoryHandle(nomePasta, { create: true });
-
-        const fileJson = await pastaHandle.getFileHandle("dados.json", { create: true });
-        const writerJson = await fileJson.createWritable();
-        await writerJson.write(JSON.stringify(dados, null, 4));
-        await writerJson.close();
-
-        if (arquivoAgendamentoObj) {
-            const f = await pastaHandle.getFileHandle(`Marcação - ${pacienteLimpo}.pdf`, { create: true });
-            const w = await f.createWritable();
-            await w.write(arquivoAgendamentoObj);
-            await w.close();
-        }
-        if (arquivoSolicitacaoObj) {
-            const f = await pastaHandle.getFileHandle(`Solicitação - ${pacienteLimpo}.pdf`, { create: true });
-            const w = await f.createWritable();
-            await w.write(arquivoSolicitacaoObj);
-            await w.close();
-        }
-
-        if (avisar) mostrarToast("Dados salvos no banco com sucesso!", "sucesso");
-        if (atualizarLista) await atualizarListaPacientesBanco();   // recarrega a lista para incluir o registro recém-salvo
+        await pastaHandle.getFileHandle(nomeArquivo);
         return true;
-    } catch (e) {
-        console.error(e);
-        if (avisar) mostrarToast("Erro ao salvar. Verifique as permissões da pasta.", "erro");
+    } catch {
         return false;
     }
+}
+
+/**
+ * Grava um arquivo dentro de uma pasta de forma segura.
+ *
+ * CORREÇÃO (v1.5.0): a versão anterior criava o arquivo e só depois
+ * tentava escrever o conteúdo. Quando a escrita falhava, sobrava no
+ * disco um arquivo de 0 byte — que aparecia na pasta como se fosse um
+ * PDF válido, mas dava erro ao abrir. Aqui, se a escrita falhar:
+ *   • o conteúdo anterior é preservado (writer.abort());
+ *   • se o arquivo tinha acabado de ser criado, ele é apagado;
+ *   • o erro é repassado para quem chamou, com o motivo técnico real.
+ */
+async function gravarArquivoNaPasta(pastaHandle, nomeArquivo, conteudo) {
+    const jaExistia = await arquivoExisteNaPasta(pastaHandle, nomeArquivo);
+    const fileHandle = await pastaHandle.getFileHandle(nomeArquivo, { create: true });
+    const writer = await fileHandle.createWritable();
+
+    try {
+        await writer.write(conteudo);
+        await writer.close();
+    } catch (erro) {
+        try { await writer.abort(); } catch { /* o writer já pode ter morrido junto */ }
+        if (!jaExistia) {
+            try { await pastaHandle.removeEntry(nomeArquivo); } catch { /* nada a limpar */ }
+        }
+        throw erro;
+    }
+}
+
+/**
+ * Copia para "pastaDestino" os arquivos de "pastaOrigem" que ainda não
+ * existem lá. Usado para não perder os PDFs antigos quando um registro
+ * muda de pasta (substituição ou edição do nome/OM/data).
+ * @param {(nome:string)=>string} [mapearNome] - permite gravar o arquivo
+ *        com outro nome no destino (usado ao corrigir o nome do
+ *        paciente, que aparece dentro do nome do PDF).
+ */
+async function copiarArquivosDaPasta(pastaOrigem, pastaDestino, ignorar = ["dados.json"], mapearNome = null) {
+    for await (const entrada of pastaOrigem.values()) {
+        if (entrada.kind !== "file") continue;
+        if (ignorar.includes(entrada.name)) continue;
+
+        const nomeDestino = typeof mapearNome === "function" ? mapearNome(entrada.name) : entrada.name;
+        if (await arquivoExisteNaPasta(pastaDestino, nomeDestino)) continue;
+
+        const arquivo = await entrada.getFile();
+        await gravarArquivoNaPasta(pastaDestino, nomeDestino, await arquivo.arrayBuffer());
+    }
+}
+
+/** Remove os campos internos do sistema (começados com "_") antes de gravar o JSON no disco. */
+function limparCamposInternos(dados) {
+    const copia = { ...dados };
+    for (const chave of Object.keys(copia)) {
+        if (chave.startsWith("_")) delete copia[chave];
+    }
+    return copia;
+}
+
+/** Monta a lista de PDFs a gravar a partir do que está anexado na página LME. */
+function anexosDaPaginaLME(dados) {
+    const pacienteLimpo = sanitizarNomePasta(dados.paciente);
+    const lista = [];
+
+    if (arquivoAgendamentoObj && arquivoAgendamentoObj.bytes) {
+        lista.push({ nome: `Marcação - ${pacienteLimpo}.pdf`, bytes: arquivoAgendamentoObj.bytes });
+    }
+    if (arquivoSolicitacaoObj && arquivoSolicitacaoObj.bytes) {
+        lista.push({ nome: `Solicitação - ${pacienteLimpo}.pdf`, bytes: arquivoSolicitacaoObj.bytes });
+    }
+    return lista;
+}
+
+/**
+ * Cria (ou reutiliza) uma subpasta para o paciente e grava dentro dela
+ * o "dados.json" e os PDFs anexados.
+ * @param {string} sufixoPasta - texto extra no nome da pasta, usado para não colidir ao "Salvar Ambos".
+ * @param {{avisar?: boolean, atualizarLista?: boolean, arquivos?: Array}} opcoes -
+ *        "arquivos" permite passar uma lista própria de anexos; quando
+ *        vem uma lista vazia, nenhum PDF é gravado (é o caso da
+ *        importação de backup — ver MÓDULO 20).
+ * @returns {{ok: boolean, nomePasta: string, motivo: string}}
+ */
+async function executarSalvamentoBanco(dados, sufixoPasta = "", opcoes = {}) {
+    const { avisar = true, atualizarLista = true, arquivos = null } = opcoes;
+
+    const nomePasta = montarNomePastaPaciente(dados, sufixoPasta);
+    const anexos = arquivos !== null ? arquivos : anexosDaPaginaLME(dados);
+
+    let pastaHandle;
+
+    // Etapa 1: a pasta do paciente.
+    try {
+        pastaHandle = await dirHandleBanco.getDirectoryHandle(nomePasta, { create: true });
+    } catch (erro) {
+        console.error("Erro ao criar a pasta do paciente:", erro);
+        if (avisar) mostrarToast(`Não foi possível criar a pasta do paciente (${erro.name || "erro"}).`, "erro");
+        return { ok: false, nomePasta, motivo: `não foi possível criar a pasta (${erro.name || "erro"})` };
+    }
+
+    // Etapa 2: o dados.json.
+    try {
+        await gravarArquivoNaPasta(pastaHandle, "dados.json", JSON.stringify(limparCamposInternos(dados), null, 4));
+    } catch (erro) {
+        console.error("Erro ao gravar o dados.json:", erro);
+        if (avisar) mostrarToast(`Não foi possível gravar o dados.json (${erro.name || "erro"}).`, "erro");
+        return { ok: false, nomePasta, motivo: `falha ao gravar o dados.json (${erro.name || "erro"})` };
+    }
+
+    // Etapa 3: os PDFs — CADA UM em seu próprio tratamento de erro.
+    // CORREÇÃO (v1.5.0): antes, tudo ficava dentro de um único "try". Se a
+    // gravação do primeiro PDF falhasse, o segundo simplesmente nunca era
+    // tentado e a mensagem sempre culpava a permissão da pasta, qualquer
+    // que fosse o motivo real. Agora uma falha não derruba as outras
+    // gravações e o aviso diz QUAL arquivo falhou e POR QUÊ.
+    const falhas = [];
+    for (const anexo of anexos) {
+        try {
+            await gravarArquivoNaPasta(pastaHandle, anexo.nome, anexo.bytes);
+        } catch (erro) {
+            console.error(`Erro ao gravar "${anexo.nome}":`, erro);
+            falhas.push(`${anexo.nome} (${erro.name || "erro"})`);
+        }
+    }
+
+    if (atualizarLista) await atualizarListaPacientesBanco();
+
+    if (falhas.length > 0) {
+        if (avisar) mostrarToast(`Dados salvos, mas falhou ao gravar: ${falhas.join(", ")}.`, "erro");
+        return { ok: false, nomePasta, motivo: `falha ao gravar ${falhas.join(", ")}` };
+    }
+
+    if (avisar) mostrarToast("Dados salvos no banco com sucesso!", "sucesso");
+    return { ok: true, nomePasta, motivo: "" };
 }
 
 // 8. DISPARADORES DOS BOTÕES PRINCIPAIS
@@ -1930,23 +2074,54 @@ document.addEventListener("click", async (e) => {
         fecharModalDuplicidade();
     }
 
-    // Modal Duplicidade - Substituir (apaga o registro antigo e grava o novo no lugar)
+    // Modal Duplicidade - Substituir (grava o novo registro e só então apaga o antigo)
+    //
+    // CORREÇÃO (v1.5.0) — três problemas nesta ação:
+    //   1. A pasta antiga era apagada ANTES de gravar a nova. Quem arrasta
+    //      um PDF de dentro da própria pasta do banco (ex.: reaproveitar o
+    //      DIEx de solicitação numa remarcação) tinha o arquivo apagado no
+    //      meio do caminho — daí o "Erro ao salvar" e o PDF que sumia.
+    //   2. Os PDFs antigos eram perdidos quando o novo salvamento não
+    //      trazia anexos (paciente carregado pela barra de pesquisa).
+    //   3. O aviso "substituído com sucesso" aparecia mesmo quando o
+    //      salvamento tinha falhado.
     else if (btn.id === "btnModalSubstituir") {
         if (!pacienteExistenteModal || !pacienteNovoModal) return;
 
-        try {
-            if (pacienteExistenteModal._nomePasta) {
-                await dirHandleBanco.removeEntry(pacienteExistenteModal._nomePasta, { recursive: true });
-            }
+        const existente = pacienteExistenteModal;
+        const novo = pacienteNovoModal;
+        fecharModalDuplicidade();
 
-            const dadosParaSalvar = pacienteNovoModal;
-            fecharModalDuplicidade();
-            await executarSalvamentoBanco(dadosParaSalvar);
-            mostrarToast("Registro antigo substituído com sucesso!", "sucesso");
-        } catch (erro) {
-            console.error("Erro ao substituir paciente:", erro);
-            mostrarToast("Erro ao excluir o paciente antigo para substituição.", "erro");
+        const nomePastaNova = montarNomePastaPaciente(novo);
+
+        // 1) Grava o registro novo primeiro. Nada é apagado até aqui.
+        const resultado = await executarSalvamentoBanco(novo, "", { avisar: false, atualizarLista: false });
+
+        if (!resultado.ok) {
+            await atualizarListaPacientesBanco();
+            mostrarToast(`Nada foi substituído: ${resultado.motivo}.`, "erro");
+            return;
         }
+
+        // 2) Só agora cuida da pasta antiga — levando junto os arquivos
+        //    que existiam lá e não foram regravados agora.
+        if (existente._nomePasta && existente._nomePasta !== nomePastaNova) {
+            try {
+                const pastaAntiga = await dirHandleBanco.getDirectoryHandle(existente._nomePasta);
+                const pastaNova = await dirHandleBanco.getDirectoryHandle(nomePastaNova);
+
+                await copiarArquivosDaPasta(pastaAntiga, pastaNova);
+                await dirHandleBanco.removeEntry(existente._nomePasta, { recursive: true });
+            } catch (erro) {
+                console.error("Erro ao remover a pasta antiga:", erro);
+                mostrarToast("Registro novo salvo, mas a pasta antiga não pôde ser apagada.", "aviso");
+                await atualizarListaPacientesBanco();
+                return;
+            }
+        }
+
+        await atualizarListaPacientesBanco();
+        mostrarToast("Registro antigo substituído com sucesso!", "sucesso");
     }
 
     // Modal Duplicidade - Salvar Ambos (mantém o antigo e cria uma pasta nova com sufixo "(Cópia NNNN)")
@@ -1974,6 +2149,11 @@ document.addEventListener("click", async (e) => {
 
             fecharModalExcluir();
             mostrarToast("Registro excluído com sucesso!", "sucesso");
+
+            // v1.5.0: o cartão aberto no visualizador (MÓDULO 22) pode ser
+            // justamente o que acabou de sumir do disco — fecha antes de
+            // redesenhar para não deixar campos órfãos na tela.
+            if (typeof fecharRegistroAberto === "function") fecharRegistroAberto();
 
             dadosBancoCarregados = null;
 
@@ -2319,8 +2499,13 @@ document.getElementById("inputImportarBackup")?.addEventListener("change", async
                 continue;
             }
 
-            const sucesso = await executarSalvamentoBanco(dados, "", { avisar: false, atualizarLista: false });
-            if (sucesso) importados++; else ignorados++;
+            // CORREÇÃO (v1.5.0): "arquivos: []" impede que os PDFs que
+            // estiverem anexados na aba LME neste momento sejam copiados
+            // para dentro da pasta de TODOS os pacientes importados — era
+            // o que acontecia antes, porque o salvamento sempre olhava as
+            // variáveis globais de anexo.
+            const resultado = await executarSalvamentoBanco(dados, "", { avisar: false, atualizarLista: false, arquivos: [] });
+            if (resultado.ok) importados++; else ignorados++;
         }
 
         await atualizarListaPacientesBanco();
@@ -2360,9 +2545,840 @@ if (campoResultadoLme) {
     });
 
     // Ao carregar a página, recupera um rascunho não copiado (se existir).
+    // REVISÃO (v1.5.2): a recuperação continua acontecendo — o texto ainda
+    // aparece sozinho no campo "Resultado" — mas o aviso em tela foi
+    // removido a pedido do usuário, que achava a mensagem incômoda.
     const rascunhoSalvo = localStorage.getItem("automed_rascunhoResultado");
     if (rascunhoSalvo && rascunhoSalvo.trim() && !campoResultadoLme.innerHTML.trim()) {
         campoResultadoLme.innerHTML = rascunhoSalvo;
-        mostrarToast("Um rascunho não copiado foi recuperado.", "aviso");
     }
 }
+
+
+/* ============================================================
+   MÓDULO 22 — VISUALIZADOR DE REGISTROS DO BANCO (PÁGINA BANCO)
+   O que este bloco faz: mostra, dentro da barra recolhível "BANCO DE
+   DADOS", a lista dos pacientes salvos na pasta do banco. Cada linha
+   abre em sanfona e revela:
+     • os campos do "dados.json", já editáveis;
+     • os PDFs guardados na pasta daquele paciente;
+     • os botões SALVAR ALTERAÇÕES, USAR NO (LME/EXCEL/DOC) e EXCLUIR.
+
+   COMO ELE SE ENCAIXA NO RESTO DO SISTEMA
+   Ele não lê a pasta por conta própria: aproveita o índice que o
+   MÓDULO 14 já monta em "mapaPacientesBanco" toda vez que a pasta é
+   varrida. Por isso a última linha de "atualizarListaPacientesBanco"
+   chama a função de desenhar a lista — sempre que o banco muda (ao
+   conectar, salvar, excluir ou importar), a tela se redesenha sozinha.
+
+   O QUE É CALCULADO E O QUE É DIGITADO
+   Dos 17 campos do "dados.json", 11 são digitados pelo usuário e 6 são
+   recalculados na hora de salvar (ver "recalcularCamposDerivados").
+   Isso evita o erro clássico de corrigir a data em um campo e o
+   sistema continuar usando a data antiga em outro.
+   ============================================================ */
+
+// ------------------------------------------------------------------
+// 1. ESTADO DO VISUALIZADOR
+// ------------------------------------------------------------------
+
+/** Quantos registros aparecem de uma vez (o resto vem no "CARREGAR MAIS"). */
+const LOTE_REGISTROS = 50;
+
+let mapaRegistrosPorPasta = new Map();   // "nome da pasta" -> dados do paciente
+let filtroRegistros = "";                 // texto digitado na busca da lista
+let quantidadeVisivelRegistros = LOTE_REGISTROS;
+
+let registroAbertoPasta = null;      // qual cartão está aberto agora
+let registroReabrirPasta = null;     // qual cartão reabrir depois de redesenhar
+let registroTemAlteracao = false;    // há edição não salva no cartão aberto?
+let registroAvisouDescarte = false;  // o aviso de "alterações não salvas" já apareceu?
+let anexosPendentesRegistro = [];    // PDFs soltos no cartão, ainda não gravados
+let urlsTemporariasRegistro = [];    // endereços temporários criados para visualizar PDFs
+
+// ------------------------------------------------------------------
+// 2. QUAIS CAMPOS O USUÁRIO PODE EDITAR
+// Cada item vira um campo na grade do cartão aberto. "lista" liga o
+// campo a um <datalist> do HTML: o usuário escolhe um valor conhecido
+// OU digita um novo (nenhuma lista é uma prisão).
+// ------------------------------------------------------------------
+const CAMPOS_EDITAVEIS_REGISTRO = [
+    { chave: "paciente",      rotulo: "Paciente",           largo: true },
+    { chave: "medico",        rotulo: "Médico",             lista: "listaMedicosRegistro" },
+    { chave: "especialidade", rotulo: "Especialidade",      lista: "listaEspecialidadesRegistro" },
+    { chave: "data",          rotulo: "Data da consulta",   dica: "dd/mm/aaaa" },
+    { chave: "horario",       rotulo: "Horário",            dica: "hh:mm" },
+    { chave: "local",         rotulo: "Local",              largo: true },
+    { chave: "om",            rotulo: "OM solicitante",     lista: "listaOMsRegistro", largo: true },
+    { chave: "omAbr",         rotulo: "OM abreviada",       lista: "listaOMsAbrRegistro" },
+    { chave: "tipoOM",        rotulo: "Tipo de OM",         lista: "listaTiposOMRegistro" },
+    { chave: "numeroDIEx",    rotulo: "Nº do DIEx" },
+    { chave: "dataDIEx",      rotulo: "Data do DIEx",       dica: "dd/mm/aaaa" }
+];
+
+// ------------------------------------------------------------------
+// 3. LISTAS DE SUGESTÃO
+// Preenche os <datalist> vazios do HTML com o conteúdo dos dicionários
+// do MÓDULO 4. Assim, cadastrar uma nova OM continua sendo mexer em um
+// lugar só — a sugestão aqui aparece de graça.
+// ------------------------------------------------------------------
+function preencherListaSugestao(idDatalist, valores) {
+    const datalist = document.getElementById(idDatalist);
+    if (!datalist) return;
+
+    datalist.innerHTML = "";
+    for (const valor of [...new Set(valores)].sort()) {
+        if (!valor) continue;
+        const option = document.createElement("option");
+        option.value = valor;
+        datalist.appendChild(option);
+    }
+}
+
+function prepararListasDeSugestaoRegistros() {
+    preencherListaSugestao("listaMedicosRegistro", Object.values(medicosConhecidos));
+    preencherListaSugestao("listaOMsRegistro", Object.keys(omsConhecidas));
+    preencherListaSugestao("listaOMsAbrRegistro", Object.values(omsConhecidas));
+    preencherListaSugestao("listaTiposOMRegistro", Object.values(cargosConhecidos));
+
+    // As especialidades ficam guardadas em CAIXA ALTA; no dados.json elas
+    // aparecem capitalizadas ("Traumatologia"), então a sugestão segue o
+    // mesmo formato que o campo espera.
+    preencherListaSugestao(
+        "listaEspecialidadesRegistro",
+        especialidadesConhecidas.map(esp => esp.toLowerCase().replace(/\b\w/g, letra => letra.toUpperCase()))
+    );
+}
+
+// ------------------------------------------------------------------
+// 4. BUSCA VISUAL
+// ------------------------------------------------------------------
+
+/** Tira acentos e deixa em caixa alta, preservando espaços — usado só para comparar. */
+function normalizarParaBusca(texto) {
+    return (texto || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toUpperCase();
+}
+
+/** Junta num texto só tudo que a busca deve enxergar de um paciente. */
+function textoBuscavelDoRegistro(dados) {
+    return normalizarParaBusca([
+        dados.paciente, dados.omAbr, dados.om, dados.especialidade,
+        dados.medico, dados.data, dados.dataMilitar, dados.numeroDIEx
+    ].join(" "));
+}
+
+/**
+ * Devolve os registros que atendem à busca, em ordem alfabética de
+ * paciente (A→Z). Cada palavra digitada é procurada separadamente,
+ * então "silva trauma" acha o paciente Silva da Traumatologia mesmo
+ * com as duas informações vindo de campos diferentes.
+ */
+function registrosFiltrados() {
+    const termos = normalizarParaBusca(filtroRegistros).split(/\s+/).filter(Boolean);
+
+    const lista = [...mapaRegistrosPorPasta.values()].filter(dados => {
+        if (termos.length === 0) return true;
+        const alvo = textoBuscavelDoRegistro(dados);
+        return termos.every(termo => alvo.includes(termo));
+    });
+
+    return lista.sort((a, b) =>
+        (a.paciente || "").localeCompare(b.paciente || "", "pt-BR", { sensitivity: "base" })
+    );
+}
+
+// ------------------------------------------------------------------
+// 5. DESENHO DA LISTA
+// ------------------------------------------------------------------
+
+/** Cria um <span> de coluna do cabeçalho já com o texto certo. */
+function criarColunaRegistro(texto, classeExtra) {
+    const span = document.createElement("span");
+    span.className = "registro-col " + classeExtra;
+    span.textContent = texto || "-";
+    return span;
+}
+
+/** Monta a linha fechada de um paciente (o cabeçalho clicável da sanfona). */
+function criarLinhaRegistro(dados) {
+    const item = document.createElement("div");
+    item.className = "registro-item";
+    item.dataset.pasta = dados._nomePasta;
+
+    const cabecalho = document.createElement("button");
+    cabecalho.type = "button";
+    cabecalho.className = "registro-cabecalho";
+    cabecalho.title = "Clique para abrir os dados deste paciente";
+
+    cabecalho.appendChild(criarColunaRegistro(dados.paciente, "registro-col-paciente"));
+    cabecalho.appendChild(criarColunaRegistro(dados.omAbr, "registro-col-secundaria"));
+    cabecalho.appendChild(criarColunaRegistro(dados.data, "registro-col-secundaria"));
+    cabecalho.appendChild(criarColunaRegistro(dados.especialidade, "registro-col-secundaria"));
+
+    const seta = document.createElement("span");
+    seta.className = "registro-seta";
+    seta.textContent = "▼";
+    cabecalho.appendChild(seta);
+
+    cabecalho.addEventListener("click", () => alternarRegistro(item));
+
+    item.appendChild(cabecalho);
+    return item;
+}
+
+/** Escreve uma mensagem no lugar da lista (banco desconectado, busca sem resultado, etc.). */
+function mostrarMensagemNaLista(container, mensagem) {
+    const aviso = document.createElement("div");
+    aviso.className = "lista-registros-vazia";
+    aviso.textContent = mensagem;
+    container.appendChild(aviso);
+}
+
+/**
+ * Redesenha a lista inteira a partir de "mapaPacientesBanco".
+ * É chamada pelo MÓDULO 14 sempre que a pasta do banco é varrida.
+ */
+function renderizarRegistrosBanco() {
+    const container = document.getElementById("listaRegistrosBanco");
+    if (!container) return;   // sistema aberto numa versão do HTML sem esta área
+
+    // Reconstrói o índice por nome de pasta (chave única e estável:
+    // duas pastas nunca têm o mesmo nome dentro do mesmo diretório).
+    mapaRegistrosPorPasta = new Map();
+    for (const dados of mapaPacientesBanco.values()) {
+        if (dados && dados._nomePasta) mapaRegistrosPorPasta.set(dados._nomePasta, dados);
+    }
+
+    container.innerHTML = "";
+    registroAbertoPasta = null;
+    registroTemAlteracao = false;
+    registroAvisouDescarte = false;
+    anexosPendentesRegistro = [];
+    liberarUrlsTemporarias();
+
+    const contador = document.getElementById("contadorRegistros");
+    const btnCarregarMais = document.getElementById("btnCarregarMaisRegistros");
+
+    if (!dirHandleBanco) {
+        mostrarMensagemNaLista(container, "Conecte a pasta do banco para ver os registros salvos.");
+        if (contador) contador.textContent = "";
+        btnCarregarMais?.classList.add("oculto");
+        return;
+    }
+
+    const encontrados = registrosFiltrados();
+    const visiveis = encontrados.slice(0, quantidadeVisivelRegistros);
+
+    if (encontrados.length === 0) {
+        mostrarMensagemNaLista(
+            container,
+            filtroRegistros
+                ? "Nenhum registro encontrado para esta pesquisa."
+                : "Nenhum paciente salvo nesta pasta ainda."
+        );
+    } else {
+        for (const dados of visiveis) {
+            container.appendChild(criarLinhaRegistro(dados));
+        }
+    }
+
+    if (contador) {
+        contador.textContent = encontrados.length === 0
+            ? ""
+            : `Mostrando ${visiveis.length} de ${encontrados.length} registro(s).`;
+    }
+
+    if (btnCarregarMais) {
+        btnCarregarMais.classList.toggle("oculto", visiveis.length >= encontrados.length);
+    }
+
+    // Reabre o cartão que estava aberto antes de salvar (o nome da pasta
+    // pode ter mudado no caminho — por isso a variável guarda o nome NOVO).
+    if (registroReabrirPasta) {
+        const item = container.querySelector(`.registro-item[data-pasta="${CSS.escape(registroReabrirPasta)}"]`);
+        registroReabrirPasta = null;
+        if (item) abrirRegistro(item);
+    }
+}
+
+// ------------------------------------------------------------------
+// 6. ABRIR E FECHAR O CARTÃO (SANFONA)
+// ------------------------------------------------------------------
+
+/** Fecha os endereços temporários dos PDFs abertos (libera memória). */
+function liberarUrlsTemporarias() {
+    for (const url of urlsTemporariasRegistro) {
+        try { URL.revokeObjectURL(url); } catch { /* já liberado */ }
+    }
+    urlsTemporariasRegistro = [];
+}
+
+/**
+ * Antes de fechar/trocar de cartão, avisa uma vez que há edição não
+ * salva. O segundo clique confirma o descarte — é o mesmo espírito dos
+ * avisos do sistema (toast), sem inventar mais uma janela modal.
+ */
+function podeDescartarEdicaoAberta() {
+    if (!registroTemAlteracao) return true;
+
+    if (!registroAvisouDescarte) {
+        registroAvisouDescarte = true;
+        mostrarToast("Há alterações não salvas neste registro. Clique de novo para descartá-las.", "aviso");
+        return false;
+    }
+    return true;
+}
+
+function fecharRegistroAberto() {
+    const container = document.getElementById("listaRegistrosBanco");
+    const aberto = container?.querySelector(".registro-item.aberto");
+
+    if (aberto) {
+        aberto.classList.remove("aberto");
+        aberto.querySelector(".registro-corpo")?.remove();
+    }
+
+    registroAbertoPasta = null;
+    registroTemAlteracao = false;
+    registroAvisouDescarte = false;
+    anexosPendentesRegistro = [];
+    liberarUrlsTemporarias();
+}
+
+function alternarRegistro(item) {
+    const pasta = item.dataset.pasta;
+
+    if (registroAbertoPasta === pasta) {
+        if (!podeDescartarEdicaoAberta()) return;
+        fecharRegistroAberto();
+        return;
+    }
+
+    if (registroAbertoPasta && !podeDescartarEdicaoAberta()) return;
+
+    fecharRegistroAberto();
+    abrirRegistro(item);
+}
+
+// ------------------------------------------------------------------
+// 7. CONTEÚDO DO CARTÃO ABERTO
+// ------------------------------------------------------------------
+
+/** Marca que algo foi editado e acende o botão de salvar. */
+function marcarRegistroEditado(corpo) {
+    registroTemAlteracao = true;
+    registroAvisouDescarte = false;
+
+    const btnSalvar = corpo.querySelector(".btn-salvar-registro");
+    if (btnSalvar) btnSalvar.disabled = false;
+}
+
+/** Cria um campo editável da grade (rótulo + caixa de digitação). */
+function criarCampoRegistro(campo, valor, corpo) {
+    const caixa = document.createElement("div");
+    caixa.className = "campo-registro" + (campo.largo ? " campo-registro-largo" : "");
+
+    const label = document.createElement("label");
+    label.textContent = campo.rotulo;
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = valor || "";
+    input.dataset.campo = campo.chave;
+    input.autocomplete = "off";
+    if (campo.dica) input.placeholder = campo.dica;
+    if (campo.lista) input.setAttribute("list", campo.lista);
+
+    input.addEventListener("input", () => {
+        marcarRegistroEditado(corpo);
+
+        // Cortesia: ao escolher uma OM conhecida pelo nome completo, a
+        // sigla se preenche sozinha (o usuário ainda pode trocá-la).
+        if (campo.chave === "om" && omsConhecidas[input.value]) {
+            const campoAbr = corpo.querySelector('[data-campo="omAbr"]');
+            if (campoAbr) campoAbr.value = omsConhecidas[input.value];
+        }
+    });
+
+    caixa.appendChild(label);
+    caixa.appendChild(input);
+    return caixa;
+}
+
+/** Lê o conteúdo atual da pasta do paciente e lista os arquivos encontrados. */
+async function carregarArquivosDoRegistro(dados, area) {
+    area.innerHTML = "";
+
+    let arquivos = [];
+    try {
+        const pasta = await dirHandleBanco.getDirectoryHandle(dados._nomePasta);
+        for await (const entrada of pasta.values()) {
+            if (entrada.kind === "file" && entrada.name !== "dados.json") {
+                arquivos.push(entrada.name);
+            }
+        }
+    } catch (erro) {
+        console.error("Erro ao listar os arquivos do paciente:", erro);
+        mostrarMensagemNaLista(area, "Não foi possível ler os arquivos desta pasta.");
+        return;
+    }
+
+    if (arquivos.length === 0) {
+        mostrarMensagemNaLista(area, "Nenhum PDF guardado na pasta deste paciente.");
+    }
+
+    for (const nome of arquivos.sort()) {
+        const linha = document.createElement("div");
+        linha.className = "arquivo-registro";
+
+        const nomeEl = document.createElement("span");
+        nomeEl.className = "arquivo-registro-nome";
+        nomeEl.textContent = nome;
+
+        const btnVer = document.createElement("button");
+        btnVer.type = "button";
+        btnVer.className = "btn-registro btn-arquivo-registro";
+        btnVer.textContent = "VISUALIZAR";
+        btnVer.addEventListener("click", () => visualizarArquivoDoRegistro(dados._nomePasta, nome));
+
+        linha.appendChild(nomeEl);
+        linha.appendChild(btnVer);
+        area.appendChild(linha);
+    }
+
+    // Mostra também o que está esperando para ser gravado (arquivo
+    // arrastado no cartão e ainda não confirmado com SALVAR ALTERAÇÕES).
+    for (const pendente of anexosPendentesRegistro) {
+        const linha = document.createElement("div");
+        linha.className = "arquivo-registro";
+
+        const nomeEl = document.createElement("span");
+        nomeEl.className = "arquivo-registro-nome";
+        nomeEl.textContent = pendente.nomeOriginal;
+
+        const aviso = document.createElement("span");
+        aviso.className = "arquivo-registro-aviso";
+        aviso.textContent = "PENDENTE — grava ao salvar";
+
+        linha.appendChild(nomeEl);
+        linha.appendChild(aviso);
+        area.appendChild(linha);
+    }
+}
+
+/** Abre o PDF numa nova aba do navegador, sem baixar nada. */
+async function visualizarArquivoDoRegistro(nomePasta, nomeArquivo) {
+    try {
+        const pasta = await dirHandleBanco.getDirectoryHandle(nomePasta);
+        const handle = await pasta.getFileHandle(nomeArquivo);
+        const arquivo = await handle.getFile();
+
+        const url = URL.createObjectURL(arquivo);
+        urlsTemporariasRegistro.push(url);
+
+        const janela = window.open(url, "_blank");
+
+        // Se o navegador bloquear a janela (política de pop-ups), tenta
+        // pelo caminho de um link temporário, que costuma passar.
+        if (!janela) {
+            const link = document.createElement("a");
+            link.href = url;
+            link.target = "_blank";
+            link.rel = "noopener";
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        }
+    } catch (erro) {
+        console.error("Erro ao abrir o PDF:", erro);
+        mostrarToast(`Não foi possível abrir "${nomeArquivo}" (${erro.name || "erro"}).`, "erro");
+    }
+}
+
+/** Monta a área de anexar/substituir PDF dentro do cartão. */
+function criarAreaAnexoRegistro(dados, corpo, areaArquivos) {
+    const linha = document.createElement("div");
+    linha.className = "linha-anexo-registro";
+
+    const dropzone = document.createElement("div");
+    dropzone.className = "dropZoneDoc dropzone-registro";
+
+    const texto = document.createElement("div");
+    texto.className = "textoDrop";
+    texto.textContent = "Clique ou arraste um PDF para anexar/substituir";
+
+    const dica = document.createElement("div");
+    dica.className = "nomeArquivo";
+    dica.textContent = "Escolha ao lado com que nome ele será gravado ANTES de soltar o arquivo.";
+    dropzone.appendChild(dica);
+    dropzone.appendChild(texto);
+
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".pdf";
+    dropzone.appendChild(input);
+
+    // Para onde o arquivo vai: com o nome que ele já tem, ou assumindo o
+    // lugar do "Marcação"/"Solicitação" padrão daquele paciente.
+    const select = document.createElement("select");
+    select.className = "select-nome-anexo";
+    select.title = "Com que nome o arquivo será gravado na pasta";
+    for (const opcao of [
+        { valor: "original", texto: "MANTER NOME DO ARQUIVO" },
+        { valor: "marcacao", texto: "GRAVAR COMO MARCAÇÃO" },
+        { valor: "solicitacao", texto: "GRAVAR COMO SOLICITAÇÃO" }
+    ]) {
+        const option = document.createElement("option");
+        option.value = opcao.valor;
+        option.textContent = opcao.texto;
+        select.appendChild(option);
+    }
+
+    // Reaproveita a mesma função de arrastar-e-soltar das outras páginas
+    // (MÓDULO 9), inclusive o acesso por teclado.
+    configurarDropZone(dropzone, input, async (file) => {
+        try {
+            anexosPendentesRegistro.push({
+                nomeOriginal: file.name,
+                destino: select.value,
+                bytes: await file.arrayBuffer()
+            });
+
+            marcarRegistroEditado(corpo);
+            await carregarArquivosDoRegistro(dados, areaArquivos);
+            mostrarToast("PDF na fila. Clique em SALVAR ALTERAÇÕES para gravá-lo.", "aviso");
+        } catch (erro) {
+            console.error("Erro ao ler o PDF anexado:", erro);
+            mostrarToast("Não foi possível ler o PDF anexado.", "erro");
+        }
+        input.value = "";
+    });
+
+    linha.appendChild(dropzone);
+    linha.appendChild(select);
+    return linha;
+}
+
+/** Monta o rodapé de ações do cartão (salvar / usar em / excluir). */
+function criarAcoesRegistro(dados, corpo) {
+    const acoes = document.createElement("div");
+    acoes.className = "registro-acoes";
+
+    const btnSalvar = document.createElement("button");
+    btnSalvar.type = "button";
+    btnSalvar.className = "btn-registro btn-salvar-registro";
+    btnSalvar.textContent = "SALVAR ALTERAÇÕES";
+    btnSalvar.disabled = true;   // só acende quando algo for editado
+    btnSalvar.addEventListener("click", () => salvarAlteracoesRegistro(dados, corpo));
+
+    const selectUsar = document.createElement("select");
+    selectUsar.className = "select-usar-registro";
+    for (const opcao of [
+        { valor: "lme", texto: "USAR NO LME (GERAR DIEx)" },
+        { valor: "excel", texto: "USAR NO EXCEL (LINHA DA PLANILHA)" },
+        { valor: "doc", texto: "USAR NO DOC (RENOMEAR PDF)" }
+    ]) {
+        const option = document.createElement("option");
+        option.value = opcao.valor;
+        option.textContent = opcao.texto;
+        selectUsar.appendChild(option);
+    }
+
+    const btnUsar = document.createElement("button");
+    btnUsar.type = "button";
+    btnUsar.className = "btn-registro";
+    btnUsar.textContent = "USAR";
+    btnUsar.addEventListener("click", () => usarRegistroNaPagina(selectUsar.value, dados));
+
+    const btnExcluir = document.createElement("button");
+    btnExcluir.type = "button";
+    btnExcluir.className = "btn-registro btn-registro-perigo";
+    btnExcluir.textContent = "EXCLUIR DO BANCO";
+    btnExcluir.addEventListener("click", () => abrirModalExcluir(dados));
+
+    acoes.appendChild(btnSalvar);
+    acoes.appendChild(selectUsar);
+    acoes.appendChild(btnUsar);
+    acoes.appendChild(btnExcluir);
+    return acoes;
+}
+
+/** Monta e exibe o conteúdo do cartão de um paciente. */
+function abrirRegistro(item) {
+    const dados = mapaRegistrosPorPasta.get(item.dataset.pasta);
+    if (!dados) return;
+
+    const corpo = document.createElement("div");
+    corpo.className = "registro-corpo";
+
+    // --- Campos editáveis ---
+    const tituloCampos = document.createElement("div");
+    tituloCampos.className = "registro-subtitulo";
+    tituloCampos.textContent = "DADOS DO PACIENTE (dados.json)";
+    corpo.appendChild(tituloCampos);
+
+    const grade = document.createElement("div");
+    grade.className = "registro-campos";
+    for (const campo of CAMPOS_EDITAVEIS_REGISTRO) {
+        grade.appendChild(criarCampoRegistro(campo, dados[campo.chave], corpo));
+    }
+    corpo.appendChild(grade);
+
+    // --- Arquivos da pasta ---
+    const tituloArquivos = document.createElement("div");
+    tituloArquivos.className = "registro-subtitulo";
+    tituloArquivos.textContent = "ARQUIVOS NA PASTA";
+    corpo.appendChild(tituloArquivos);
+
+    const areaArquivos = document.createElement("div");
+    areaArquivos.className = "registro-arquivos";
+    corpo.appendChild(areaArquivos);
+
+    corpo.appendChild(criarAreaAnexoRegistro(dados, corpo, areaArquivos));
+
+    // --- Ações ---
+    corpo.appendChild(criarAcoesRegistro(dados, corpo));
+
+    item.appendChild(corpo);
+    item.classList.add("aberto");
+
+    registroAbertoPasta = item.dataset.pasta;
+    registroTemAlteracao = false;
+    registroAvisouDescarte = false;
+    anexosPendentesRegistro = [];
+
+    // A leitura dos arquivos é assíncrona: o cartão já aparece montado e
+    // a lista de PDFs se completa em seguida.
+    carregarArquivosDoRegistro(dados, areaArquivos);
+}
+
+// ------------------------------------------------------------------
+// 8. SALVAR AS ALTERAÇÕES
+// ------------------------------------------------------------------
+
+/**
+ * Recalcula os campos que NÃO são digitados: eles nascem de outros.
+ * Se o usuário corrige a data da consulta, por exemplo, a data militar
+ * e a data usada no nome do arquivo precisam acompanhar — senão o
+ * registro fica com duas verdades diferentes dentro do mesmo JSON.
+ */
+function recalcularCamposDerivados(dados) {
+    dados.dataHora = (dados.data && dados.horario) ? `${dados.data} - ${dados.horario}` : (dados.data || "");
+    dados.dataMilitar = formatarDataMilitar(dados.data);
+    dados.dataNomeArquivo = formatarDataNomeArquivo(dados.data);
+    dados.cargoOM = dados.tipoOM === "Comando" ? "Comandante" : "Chefe";
+    dados.pronome = dados.tipoOM === "Comando" ? "esse" : "essa";
+    dados.especialidadeCrua = extrairEspecialidadeCrua(dados.especialidade) || (dados.especialidade || "").toUpperCase();
+    return dados;
+}
+
+/** Confere se o texto está no formato de data que o sistema sabe converter. */
+function dataValidaParaBanco(texto) {
+    return /^\d{1,2}\/\d{1,2}\/\d{4}$/.test((texto || "").trim());
+}
+
+/** Descobre com que nome cada anexo pendente será gravado. */
+function nomeFinalDoAnexo(anexo, dados) {
+    const pacienteLimpo = sanitizarNomePasta(dados.paciente);
+
+    if (anexo.destino === "marcacao") return `Marcação - ${pacienteLimpo}.pdf`;
+    if (anexo.destino === "solicitacao") return `Solicitação - ${pacienteLimpo}.pdf`;
+    return sanitizarNomePasta(anexo.nomeOriginal);
+}
+
+/**
+ * Grava no disco tudo que foi editado no cartão: o dados.json, os PDFs
+ * pendentes e — se o nome do paciente, a OM ou a data mudaram — o
+ * próprio nome da pasta.
+ */
+async function salvarAlteracoesRegistro(dadosOriginais, corpo) {
+    if (!dirHandleBanco) {
+        mostrarToast("Conecte a pasta do banco antes de salvar.", "aviso");
+        return;
+    }
+
+    // 1) Lê o que está escrito nos campos.
+    const editado = { ...dadosOriginais };
+    for (const campo of CAMPOS_EDITAVEIS_REGISTRO) {
+        const input = corpo.querySelector(`[data-campo="${campo.chave}"]`);
+        if (input) editado[campo.chave] = input.value.trim();
+    }
+
+    // 2) Confere o mínimo necessário. Paciente, OM abreviada e data
+    //    formam o nome da pasta — sem eles não há onde gravar.
+    if (!editado.paciente || !editado.omAbr) {
+        mostrarToast("Paciente e OM abreviada não podem ficar em branco.", "aviso");
+        return;
+    }
+    if (!dataValidaParaBanco(editado.data)) {
+        mostrarToast("A data da consulta precisa estar no formato dd/mm/aaaa.", "aviso");
+        return;
+    }
+
+    // 3) Atualiza os campos calculados e descobre como a pasta deve se chamar.
+    recalcularCamposDerivados(editado);
+
+    const pastaAtual = dadosOriginais._nomePasta;
+    const pastaNova = montarNomePastaPaciente(editado);
+    const vaiRenomear = pastaNova !== pastaAtual;
+
+    const btnSalvar = corpo.querySelector(".btn-salvar-registro");
+    if (btnSalvar) btnSalvar.disabled = true;
+
+    try {
+        // 4) Renomear = criar a pasta nova, levar os arquivos e apagar a
+        //    antiga (o navegador não tem um comando "renomear pasta").
+        if (vaiRenomear) {
+            if (await pastaJaExisteNoBanco(pastaNova)) {
+                mostrarToast(`Já existe a pasta "${pastaNova}" no banco. Ajuste os dados ou exclua o registro repetido.`, "erro");
+                if (btnSalvar) btnSalvar.disabled = false;
+                return;
+            }
+
+            const destino = await dirHandleBanco.getDirectoryHandle(pastaNova, { create: true });
+            await gravarArquivoNaPasta(destino, "dados.json", JSON.stringify(limparCamposInternos(editado), null, 4));
+            await gravarAnexosPendentes(destino, editado);
+
+            const origem = await dirHandleBanco.getDirectoryHandle(pastaAtual);
+
+            // Os PDFs padrão carregam o nome do paciente; se o nome foi
+            // corrigido, o arquivo copiado acompanha a correção.
+            await copiarArquivosDaPasta(origem, destino, ["dados.json"], nomeAntigo =>
+                renomearAnexoPadrao(nomeAntigo, dadosOriginais.paciente, editado.paciente)
+            );
+
+            await dirHandleBanco.removeEntry(pastaAtual, { recursive: true });
+            mostrarToast(`Registro salvo. A pasta passou a se chamar "${pastaNova}".`, "sucesso");
+
+        } else {
+            const pasta = await dirHandleBanco.getDirectoryHandle(pastaAtual, { create: true });
+            await gravarArquivoNaPasta(pasta, "dados.json", JSON.stringify(limparCamposInternos(editado), null, 4));
+            await gravarAnexosPendentes(pasta, editado);
+            mostrarToast("Registro atualizado com sucesso!", "sucesso");
+        }
+
+        // 5) Relê a pasta e reabre o mesmo cartão, agora com os dados novos.
+        registroTemAlteracao = false;
+        anexosPendentesRegistro = [];
+        registroReabrirPasta = pastaNova;
+        await atualizarListaPacientesBanco();
+
+    } catch (erro) {
+        console.error("Erro ao salvar as alterações do registro:", erro);
+        mostrarToast(`Não foi possível salvar (${erro.name || "erro"}). Veja o console (F12) para o detalhe.`, "erro");
+        if (btnSalvar) btnSalvar.disabled = false;
+    }
+}
+
+/** Diz se já existe uma pasta com esse nome dentro do banco. */
+async function pastaJaExisteNoBanco(nomePasta) {
+    try {
+        await dirHandleBanco.getDirectoryHandle(nomePasta);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/** Grava, na pasta indicada, os PDFs que estavam na fila do cartão. */
+async function gravarAnexosPendentes(pastaHandle, dados) {
+    for (const anexo of anexosPendentesRegistro) {
+        await gravarArquivoNaPasta(pastaHandle, nomeFinalDoAnexo(anexo, dados), anexo.bytes);
+    }
+}
+
+/** Troca o nome do paciente dentro de "Marcação - FULANO.pdf" quando ele é corrigido. */
+function renomearAnexoPadrao(nomeArquivo, pacienteAntigo, pacienteNovo) {
+    if (pacienteAntigo === pacienteNovo) return nomeArquivo;
+
+    const antigo = sanitizarNomePasta(pacienteAntigo);
+    const novo = sanitizarNomePasta(pacienteNovo);
+
+    if (nomeArquivo === `Marcação - ${antigo}.pdf`) return `Marcação - ${novo}.pdf`;
+    if (nomeArquivo === `Solicitação - ${antigo}.pdf`) return `Solicitação - ${novo}.pdf`;
+    return nomeArquivo;
+}
+
+// ------------------------------------------------------------------
+// 9. USAR O REGISTRO EM OUTRA PÁGINA
+// ------------------------------------------------------------------
+
+/**
+ * Joga o paciente escolhido direto na página de trabalho desejada.
+ * Em vez de repetir aqui a lógica de cada página, o código escreve o
+ * identificador na barra de pesquisa daquela página e dispara o mesmo
+ * evento que o usuário dispararia digitando — assim existe um só
+ * caminho para carregar um paciente do banco, e ele já é testado.
+ */
+function usarRegistroNaPagina(destino, dados) {
+    const identificador = `${dados.paciente} - ${dados.omAbr} (${dados.data})`;
+
+    if (!mapaPacientesBanco.has(identificador)) {
+        mostrarToast("Não foi possível carregar este paciente. Clique em ATUALIZAR e tente de novo.", "erro");
+        return;
+    }
+
+    const paginas = { lme: "inputPesquisaBanco", excel: "inputPesquisaExcel", doc: "inputPesquisaDoc" };
+    const campo = document.getElementById(paginas[destino]);
+    if (!campo) return;
+
+    // A busca da página DOC só existe no modo "LME SCAN".
+    if (destino === "doc" && tipoDocumentoSelect) {
+        tipoDocumentoSelect.value = "o";
+        tipoDocumentoSelect.dispatchEvent(new Event("change"));
+    }
+
+    campo.value = identificador;
+    campo.dispatchEvent(new Event("input"));
+
+    ativarAba(destino);
+    localStorage.setItem("automed_abaAtiva", destino);
+
+    mostrarToast(`Paciente carregado na página ${destino.toUpperCase()}.`, "sucesso");
+}
+
+// ------------------------------------------------------------------
+// 10. LIGAÇÕES DA TELA (busca, carregar mais, atualizar, recolher)
+// ------------------------------------------------------------------
+
+document.getElementById("inputBuscaRegistros")?.addEventListener("input", (e) => {
+    // Uma edição em aberto seria perdida no redesenho: avisa e segue.
+    if (registroTemAlteracao) {
+        mostrarToast("As alterações não salvas do registro aberto foram descartadas.", "aviso");
+    }
+
+    filtroRegistros = e.target.value;
+    quantidadeVisivelRegistros = LOTE_REGISTROS;   // toda busca nova recomeça pelos 50 primeiros
+    renderizarRegistrosBanco();
+});
+
+document.getElementById("btnCarregarMaisRegistros")?.addEventListener("click", () => {
+    quantidadeVisivelRegistros += LOTE_REGISTROS;
+    renderizarRegistrosBanco();
+});
+
+document.getElementById("btnAtualizarRegistros")?.addEventListener("click", async () => {
+    if (!dirHandleBanco) {
+        mostrarToast("Conecte a pasta do banco primeiro.", "aviso");
+        return;
+    }
+    await atualizarListaPacientesBanco();
+    mostrarToast("Lista relida da pasta.", "sucesso");
+});
+
+// A área começa recolhida na primeira vez que o sistema é aberto; daí
+// em diante vale a escolha do usuário, guardada no localStorage pela
+// mesma função usada nas dropzones das outras páginas (MÓDULO 9).
+const areaRegistrosBanco = document.getElementById("areaRegistrosBanco");
+if (areaRegistrosBanco && localStorage.getItem("automed_registrosBancoRecolhido") === null) {
+    areaRegistrosBanco.classList.add("recolhido");
+}
+configurarToggleDropzone("headerRegistrosBanco", "areaRegistrosBanco", "automed_registrosBancoRecolhido");
+
+// Monta as listas de sugestão e desenha o estado inicial (normalmente
+// a mensagem "conecte a pasta do banco").
+prepararListasDeSugestaoRegistros();
+renderizarRegistrosBanco();
