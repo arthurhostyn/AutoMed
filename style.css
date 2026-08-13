@@ -1651,6 +1651,46 @@ footer.recolhido #toggleAbas:hover {
     background: #353d1a99;
 }
 
+/* ------------------------------------------------------------
+   ANIMAÇÃO DE ABRIR/FECHAR (v1.5.4)
+   Vale para o corpo dos cartões de paciente e para a linha de resumo;
+   quem liga e desliga estas duas classes são as funções abrirSanfona e
+   fecharSanfona (MÓDULO 22 do script.js), que também medem a altura
+   real do conteúdo — daí não haver nenhum valor de altura aqui.
+
+   As duas classes só existem DURANTE a animação: terminada a abertura,
+   o bloco volta a ser um elemento comum, de altura livre.
+
+   Além da altura, o recheio e a borda de baixo também encolhem: sem
+   isso o bloco pararia de encolher em uns 30px em vez de sumir por
+   completo, já que recheio e borda não cabem dentro de altura zero.
+   ------------------------------------------------------------ */
+.sanfona-animando {
+    overflow: hidden;
+    transition: max-height 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+                padding-top 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+                padding-bottom 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+                border-bottom-width 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.24s ease-in-out;
+}
+
+.sanfona-fechada {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-bottom-width: 0;
+    opacity: 0;
+}
+
+/* Quem configurou o sistema operacional para reduzir animações não vê
+   a transição (o JS também já pula a animação nesse caso — esta regra
+   é a garantia do lado do CSS). */
+@media (prefers-reduced-motion: reduce) {
+    .sanfona-animando {
+        transition: none;
+    }
+}
+
 .registro-subtitulo {
     font-size: 12px;
     font-weight: bold;

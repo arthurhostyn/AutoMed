@@ -2825,6 +2825,84 @@ function renderizarRegistrosBanco() {
 // 6. ABRIR E FECHAR O CARTÃO (SANFONA)
 // ------------------------------------------------------------------
 
+/* ANIMAÇÃO DE ABRIR/FECHAR (v1.5.4)
+   Antes o corpo do cartão simplesmente aparecia e sumia de uma vez.
+   As duas funções abaixo fazem ele crescer e encolher suavemente, e são
+   usadas tanto pelos cartões de paciente quanto pela linha de resumo.
+
+   Por que a altura precisa ser medida no JS: o resto do sistema anima
+   com um teto fixo de altura (ver ".conteudo-dropzones" no CSS), o que
+   funciona quando o conteúdo tem sempre o mesmo tamanho. Aqui não tem:
+   um cartão varia conforme a quantidade de PDFs na pasta do paciente.
+   Um teto fixo alto demais faria a animação "terminar antes da hora" na
+   abertura e demorar para começar no fechamento; baixo demais cortaria
+   o conteúdo. Por isso a altura real é medida na hora.
+
+   E por que a altura é LIBERADA ao final da abertura: a lista de PDFs
+   é carregada depois que o cartão já está montado (ver a chamada a
+   carregarArquivosDoRegistro em abrirRegistro). Se o teto continuasse
+   valendo, os arquivos que chegassem depois ficariam escondidos. */
+
+const DURACAO_SANFONA = 320;   // ms — mesma casa de grandeza das demais transições
+
+/** Respeita quem pediu ao sistema operacional para reduzir animações. */
+function preferirMenosMovimento() {
+    return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+}
+
+/** Abre o bloco: cresce de zero até a altura real do conteúdo. */
+function abrirSanfona(el) {
+    if (!el) return;
+
+    if (preferirMenosMovimento()) return;   // aparece direto, sem animar
+
+    clearTimeout(el._timerSanfona);
+
+    // Mede a altura natural ANTES de encolher o bloco para zero.
+    const alturaFinal = el.offsetHeight;
+
+    el.classList.add("sanfona-animando", "sanfona-fechada");
+    void el.offsetHeight;   // força o navegador a assumir o estado fechado antes de animar
+
+    el.classList.remove("sanfona-fechada");
+    el.style.maxHeight = `${alturaFinal}px`;
+
+    el._timerSanfona = setTimeout(() => {
+        // Solta o teto: daqui em diante o bloco cresce sozinho conforme
+        // os PDFs do paciente vão sendo listados.
+        el.style.maxHeight = "";
+        el.classList.remove("sanfona-animando");
+    }, DURACAO_SANFONA + 30);
+}
+
+/**
+ * Fecha o bloco encolhendo até sumir e só então executa "aoTerminar"
+ * (que costuma ser remover o elemento ou escondê-lo de vez).
+ */
+function fecharSanfona(el, aoTerminar) {
+    const concluir = () => { if (typeof aoTerminar === "function") aoTerminar(); };
+
+    if (!el) { concluir(); return; }
+
+    if (preferirMenosMovimento()) { concluir(); return; }
+
+    clearTimeout(el._timerSanfona);
+
+    // Parte da altura atual: sem um valor de origem concreto não há o que
+    // animar (a altura natural é "auto", que não é interpolável).
+    el.classList.add("sanfona-animando");
+    el.style.maxHeight = `${el.offsetHeight}px`;
+    void el.offsetHeight;
+
+    el.style.maxHeight = "";              // deixa a classe abaixo mandar
+    el.classList.add("sanfona-fechada");
+
+    el._timerSanfona = setTimeout(() => {
+        el.classList.remove("sanfona-animando", "sanfona-fechada");
+        concluir();
+    }, DURACAO_SANFONA + 30);
+}
+
 /** Fecha os endereços temporários dos PDFs abertos (libera memória). */
 function liberarUrlsTemporarias() {
     for (const url of urlsTemporariasRegistro) {
@@ -2855,7 +2933,13 @@ function fecharRegistroAberto() {
 
     if (aberto) {
         aberto.classList.remove("aberto");
-        aberto.querySelector(".registro-corpo")?.remove();
+
+        // O corpo só sai do DOM depois de encolher até sumir. A referência
+        // é capturada aqui de propósito: se outro cartão for aberto no meio
+        // da animação, esta remoção continua valendo para ESTE corpo, e não
+        // para o que estiver aberto quando o tempo terminar.
+        const corpo = aberto.querySelector(".registro-corpo");
+        if (corpo) fecharSanfona(corpo, () => corpo.remove());
     }
 
     registroAbertoPasta = null;
@@ -3159,8 +3243,14 @@ function abrirRegistro(item) {
     // --- Ações ---
     corpo.appendChild(criarAcoesRegistro(dados, corpo));
 
+    // Sobra de um fechamento ainda em andamento (clique rápido para reabrir
+    // o mesmo cartão): sai na hora, sem esperar o fim da animação, para o
+    // cartão não ficar com dois corpos ao mesmo tempo.
+    item.querySelector(".registro-corpo")?.remove();
+
     item.appendChild(corpo);
     item.classList.add("aberto");
+    abrirSanfona(corpo);
 
     registroAbertoPasta = item.dataset.pasta;
     registroTemAlteracao = false;
@@ -3414,7 +3504,7 @@ configurarToggleDropzone("headerConexaoBanco", "areaConexaoBanco", "automed_cone
  * "#listaRegistrosBanco": não é filtrado pela busca, não entra no
  * redesenho da lista e não passa pelo controle de "edição não salva".
  */
-function alternarResumoBanco(abrir) {
+function alternarResumoBanco(abrir, animar = true) {
     const item = document.getElementById("estatisticasBanco");
     const corpo = document.getElementById("corpoResumoBanco");
     const cabecalho = document.getElementById("cabecalhoResumoBanco");
@@ -3422,10 +3512,24 @@ function alternarResumoBanco(abrir) {
     if (!item || !corpo || !cabecalho) return;
 
     item.classList.toggle("aberto", abrir);
-    corpo.classList.toggle("oculto", !abrir);
     cabecalho.setAttribute("aria-expanded", String(abrir));
-
     localStorage.setItem("automed_resumoBancoAberto", abrir);
+
+    // Sem animação na restauração inicial: ali o bloco só assume o estado
+    // salvo, e animar um bloco que o usuário nem viu ainda seria estranho.
+    if (!animar) {
+        corpo.classList.toggle("oculto", !abrir);
+        return;
+    }
+
+    if (abrir) {
+        // Tira o "oculto" primeiro: um elemento escondido não tem altura
+        // para ser medida, e é a altura que a animação precisa.
+        corpo.classList.remove("oculto");
+        abrirSanfona(corpo);
+    } else {
+        fecharSanfona(corpo, () => corpo.classList.add("oculto"));
+    }
 }
 
 document.getElementById("cabecalhoResumoBanco")?.addEventListener("click", () => {
@@ -3435,7 +3539,7 @@ document.getElementById("cabecalhoResumoBanco")?.addEventListener("click", () =>
 
 // Restaura a escolha da última vez. Na primeira abertura fica FECHADO,
 // para o resumo ocupar uma linha só e não empurrar a lista para baixo.
-alternarResumoBanco(localStorage.getItem("automed_resumoBancoAberto") === "true");
+alternarResumoBanco(localStorage.getItem("automed_resumoBancoAberto") === "true", false);
 
 // Monta as listas de sugestão e desenha o estado inicial (normalmente
 // a mensagem "conecte a pasta do banco").
