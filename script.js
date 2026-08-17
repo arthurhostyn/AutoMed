@@ -1509,6 +1509,43 @@ function sanitizarNomeArquivo(nome) {
     return nome.replace(/[\/\\:*?"<>|]/g, "_").trim();
 }
 
+/**
+ * CORREÇÃO: limpeza específica para nomes de PASTA/ARQUIVO criados pela
+ * File System Access API (getDirectoryHandle / getFileHandle).
+ *
+ * O navegador rejeita com "Name is not allowed" qualquer nome que:
+ *   • esteja vazio;
+ *   • seja "." ou "..";
+ *   • contenha "/" ou "\".
+ * E o Windows ainda recusa nomes terminados em "." ou espaço, caracteres
+ * de controle e nomes reservados (CON, PRN, NUL, COM1, LPT1...).
+ *
+ * Isso quebrava o salvamento quando a sigla da OM tinha barra
+ * (ex.: "B Adm Ap/ 3ª RM", "PqRMnt/3", "AD/3") ou quando algum campo
+ * vinha com data em "dd/mm/aaaa" — o nome da pasta ficava com "/" e o
+ * navegador entendia como caminho, lançando TypeError.
+ */
+function sanitizarNomePastaFS(nome, alternativo = "Sem nome") {
+    let limpo = String(nome ?? "")
+        .replace(/[\/\\:*?"<>|]/g, "_")     // proibidos no SO e na API
+        .replace(/[\x00-\x1F\x7F]/g, "")    // caracteres de controle
+        .replace(/\s{2,}/g, " ")
+        .trim()
+        .replace(/[.\s]+$/g, "");           // Windows não aceita final com "." ou espaço
+
+    // Nomes reservados do Windows (com ou sem extensão).
+    if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$/i.test(limpo)) {
+        limpo = `_${limpo}`;
+    }
+
+    if (!limpo || limpo === "." || limpo === "..") {
+        limpo = alternativo;
+    }
+
+    // Limite conservador para não estourar o caminho máximo do sistema.
+    return limpo.slice(0, 150).trim().replace(/[.\s]+$/g, "") || alternativo;
+}
+
 /** Dispara o download de um arquivo (Blob/File) no navegador, com o nome escolhido. */
 function baixarArquivoComNome(arquivo, nome) {
     const url = URL.createObjectURL(arquivo);
@@ -1842,12 +1879,23 @@ async function executarSalvamentoBanco(dados, sufixoPasta = "", opcoes = {}) {
     const { avisar = true, atualizarLista = true } = opcoes;
     try {
         // Remove caracteres proibidos em nomes de pasta/arquivo do sistema operacional.
-        const pacienteLimpo = dados.paciente.replace(/[\/\\:*?"<>|]/g, "_");
-        let nomePasta = `${pacienteLimpo} - ${dados.omAbr} - ${dados.dataNomeArquivo}`;
+        // ATENÇÃO: a limpeza precisa valer para TODAS as partes do nome — a sigla
+        // da OM pode conter barra (ex.: "AD/3", "B Adm Ap/ 3ª RM") e, sem isso,
+        // o navegador lança "Name is not allowed" em getDirectoryHandle.
+        const pacienteLimpo = sanitizarNomePastaFS(dados.paciente, "Paciente");
 
-        if (sufixoPasta) {
-            nomePasta += ` ${sufixoPasta}`;
-        }
+        // Só entram no nome as partes realmente preenchidas, para não gerar
+        // pastas como "FULANO -  - " quando a OM ou a data não forem extraídas.
+        const partesNome = [
+            pacienteLimpo,
+            (dados.omAbr || "").trim(),
+            (dados.dataNomeArquivo || "").trim()
+        ].filter(Boolean);
+
+        let nomePasta = partesNome.join(" - ");
+        if (sufixoPasta) nomePasta += ` ${sufixoPasta}`;
+
+        nomePasta = sanitizarNomePastaFS(nomePasta, pacienteLimpo);
 
         const pastaHandle = await dirHandleBanco.getDirectoryHandle(nomePasta, { create: true });
 
@@ -1873,8 +1921,15 @@ async function executarSalvamentoBanco(dados, sufixoPasta = "", opcoes = {}) {
         if (atualizarLista) await atualizarListaPacientesBanco();   // recarrega a lista para incluir o registro recém-salvo
         return true;
     } catch (e) {
-        console.error(e);
-        if (avisar) mostrarToast("Erro ao salvar. Verifique as permissões da pasta.", "erro");
+        console.error("Erro ao salvar no banco:", e);
+        // Mostra o motivo real no toast: "permissão negada" e "nome inválido"
+        // são erros bem diferentes, e a mensagem genérica escondia isso.
+        if (avisar) {
+            const motivo = e?.name === "NotAllowedError" || e?.name === "SecurityError"
+                ? "Verifique as permissões da pasta."
+                : (e?.message || "Erro desconhecido.");
+            mostrarToast(`Erro ao salvar. ${motivo}`, "erro");
+        }
         return false;
     }
 }
