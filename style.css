@@ -13,6 +13,7 @@
     9. Banco de dados local (barra superior e página BANCO)
    10. Mensagens flutuantes (toasts)
    11. Modais padronizados (duplicidade e exclusão)
+   12. Visualizador de registros do banco (página BANCO)
    ============================================================ */
 
 
@@ -332,11 +333,33 @@ h3 {
    giro "varrer" a vizinhança, parecendo que outros elementos giravam
    junto. A seta é um elemento próprio, do tamanho do ícone, e só ELA
    gira — a caixa por trás permanece parada. */
+/* CORREÇÃO: mesma troca aplicada em ".icone-toggle-abas" (rodapé) —
+   o caractere "▼" não fica exatamente centralizado dentro da própria
+   caixinha de texto em nenhuma fonte, então mesmo girando certinho a
+   seta parecia levemente deslocada. Ela também virou um triângulo
+   desenhado em CSS (técnica das três bordas), que é sempre
+   perfeitamente centralizado no próprio elemento — não depende de
+   fonte nem de navegador. O texto "▼" continua no HTML por
+   compatibilidade; "font-size: 0" o torna invisível e sem espaço. */
 .icone-toggle-dropzone {
     display: inline-block;
-    font-size: 14px;
+    width: 16px;
+    height: 16px;
+    font-size: 0;
+    position: relative;
     transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.27);
     transform: rotate(0deg);
+}
+
+.icone-toggle-dropzone::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid currentColor;
 }
 
 .area-dropzones.recolhido .icone-toggle-dropzone {
@@ -785,6 +808,47 @@ footer::after {
     align-items: center;
 }
 
+/* REVISÃO (v1.5.1) — o "pulinho" na diagonal ao expandir o rodapé.
+   Este botão era o último lugar do sistema onde o giro de 180° ainda
+   estava aplicado na CAIXA inteira (as setas das dropzones já tinham
+   sido corrigidas — ver a mesma observação no MÓDULO 4).
+
+   Por que isso fazia a seta sair do eixo: girar um elemento o faz rodar
+   em torno do centro da sua CAIXA, e a caixa deste botão media cerca de
+   24 x 35 px (altura fixa + recheio), enquanto o desenho da seta ocupa
+   pouco mais de 14 x 14 px no meio dela. Como o "miolo" da seta não
+   coincide com o centro dessa caixa, ao virar 180° ele ia parar alguns
+   pixels adiante — a seta chegava ao fim da animação levemente deslocada
+   para a direita e para baixo, o tal do pulinho.
+
+   Agora o botão só cuida do seu próprio movimento (subir, encolher e
+   esmaecer junto com o rodapé) e o giro fica por conta da seta, dentro
+   dele — uma caixinha do tamanho do próprio desenho, cujo centro é o
+   centro da seta. É o mesmo arranjo das setas de "ANEXAR PDF'S".
+
+   REVISÃO (ajuste fino): o botão ainda encolhia um pouco (scale) ao
+   sumir/reaparecer sozinho quando o mouse passa perto da borda de baixo
+   (o "espiar" do rodapé recolhido, sem precisar clicar). Esse encolher
+   é a causa do novo pulinho relatado — agora para a esquerda, antes
+   para a direita: a página inteira já roda reduzida por um "zoom: 0.71"
+   (ver MÓDULO 1), e somar um "scale()" em cima disso faz o navegador
+   arredondar os pixels de forma instável a cada quadro da animação,
+   como o desenho não é feito de pixels "redondos" para começo. O lado
+   do desvio muda de uma vez para outra porque o arredondamento também
+   muda — por isso não é sempre no mesmo sentido.
+
+   A solução é não empilhar mais um "scale()" sobre um zoom que já é,
+   ele próprio, uma redução de escala: o botão passou a só subir/descer
+   (translateY) e esmaecer (opacity) ao aparecer/sumir — sem encolher.
+   O efeito de "espiar" continua o mesmo, só que sem essa segunda
+   camada de arredondamento.
+
+   Detalhe que continua valendo: as três regras de transform deste
+   botão (normal, recolhido e recolhido:hover) precisam listar a MESMA
+   função, na MESMA ordem — "translateY(...)". Quando as listas
+   diferem, o navegador desiste de animar item a item e passa a
+   interpolar a matriz do conjunto, o que reintroduz pequenos desvios
+   de trajetória. */
 .toggleAbas {
     height: 35px;
     margin: 0;
@@ -792,11 +856,66 @@ footer::after {
     border-radius: 0px;
     z-index: 10;
     position: relative;
+
+    /* Centraliza a seta pelo eixo do botão em vez de deixá-la apoiada na
+       linha de base da fonte (que fica abaixo do centro). */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
     transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
                 opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1),
                 background-color 0.2s ease;
-    transform: translateY(0) rotate(0deg) scale(1);
+    transform: translateY(0);   /* sem rotate e sem scale: quem gira é a seta */
     opacity: 1;
+}
+
+/* A seta propriamente dita. O "line-height: 1" faz a caixa dela encostar
+   no desenho, sem a folga que a altura de linha padrão acrescentaria em
+   cima e embaixo — é o que garante que o centro do giro seja o centro da
+   seta. A curva de tempo é a mesma das setas das dropzones, para que
+   todas as setas do sistema tenham exatamente o mesmo jeito de virar. */
+/* CORREÇÃO (ajuste fino): mesmo girando certo, a seta ainda nascia
+   levemente descentralizada dentro do botão. A causa era o próprio
+   caractere "▼" — o desenho dele, na fonte do sistema, não ocupa o
+   centro exato da sua caixinha de texto (sobra mais vazio embaixo do
+   que em cima). Isso não tem solução via CSS de alinhamento: o desvio
+   está dentro do desenho da fonte, não no elemento.
+
+   A troca é desenhar a seta com CSS puro (um triângulo feito de
+   bordas, técnica clássica), em vez de depender do caractere. Assim o
+   centro do triângulo É o centro da caixinha, sempre, em qualquer
+   fonte ou navegador. O texto original ("▼") continua no HTML por
+   compatibilidade, mas "font-size:0" o torna invisível e sem espaço
+   — quem aparece é o triângulo do ::before. */
+.icone-toggle-abas {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    font-size: 0;   /* apaga o caractere de texto, mantendo o elemento */
+    position: relative;
+    transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.27);
+    transform: rotate(0deg);
+}
+
+/* O triângulo em si: um quadrado de largura/altura zero com três
+   bordas — duas transparentes dos lados e uma colorida embaixo — é o
+   truque de CSS que desenha uma seta perfeitamente simétrica.
+   "currentColor" usa a mesma cor do texto do botão (branco), então a
+   seta acompanha sozinha qualquer troca de cor futura. */
+.icone-toggle-abas::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid currentColor;
+}
+
+footer.recolhido .icone-toggle-abas {
+    transform: rotate(-180deg);
 }
 
 footer.recolhido #toggleAbas.toggleAbas:hover {
@@ -856,9 +975,12 @@ footer.recolhido::before {
     z-index: 1;
 }
 
+/* O giro saiu daqui e foi para ".icone-toggle-abas", logo acima: estas
+   duas regras cuidam apenas de esconder e revelar o botão junto com o
+   rodapé. */
 footer.recolhido #toggleAbas {
     opacity: 0;
-    transform: translateY(18px) rotate(-180deg) scale(0.9);
+    transform: translateY(18px);
     background: #283618;
     pointer-events: auto;
 }
@@ -866,7 +988,7 @@ footer.recolhido #toggleAbas {
 footer.recolhido:hover #toggleAbas,
 footer.recolhido #toggleAbas:hover {
     opacity: 1;
-    transform: translateY(0) rotate(-180deg) scale(1);
+    transform: translateY(0);
 }
 /* ============================================================
    MÓDULO 9 — BANCO DE DADOS LOCAL (barra superior e página BANCO)
@@ -961,10 +1083,24 @@ footer.recolhido #toggleAbas:hover {
     background: #1d2911;
 }
 
-/* PÁGINA "GERENCIADOR DO BANCO DE DADOS" */
+/* PÁGINA "GERENCIADOR DO BANCO DE DADOS"
+
+   O "min-height" é a mesma técnica já usada nas páginas EXCEL e DOC
+   (ver MÓDULO 6 e MÓDULO 7) e existe pelo mesmo motivo: o brasão de
+   fundo é desenhado dentro do container (".container::before", MÓDULO
+   2), que se estica do topo à base DELE. Se o container ficar mais
+   curto que o brasão, a imagem é cortada na base.
+
+   Com "background-size: 620px" o brasão sai com 465px de altura e
+   começa 20px acima do topo, ou seja, sua base fica a 445px. Antes
+   isso passava despercebido porque a página era sempre alta; agora,
+   com o bloco de CONEXÃO recolhido, ela encurta para cerca de 290px e
+   o brasão aparecia cortado ao meio. Os 600px abaixo cobrem os 445px
+   do desenho e ainda deixam uma folga embaixo. */
 #pagina-banco .container {
     display: block;
     text-align: center;
+    min-height: 600px;
 }
 
 .conteudo-central-banco {
@@ -1021,6 +1157,25 @@ footer.recolhido #toggleAbas:hover {
     text-align: left;
     margin-left: auto;
     margin-right: auto;
+}
+
+/* ------------------------------------------------------------
+   BLOCO RECOLHÍVEL DE CONEXÃO (v1.5.3)
+   O cartão de conexão desceu para o fim da página e passou a recolher,
+   usando a mesma barra das áreas de anexo (MÓDULO 4). Só faltava o
+   teto da animação: ".conteudo-dropzones" limita a 250px, altura
+   pensada para duas dropzones e curta demais para este cartão (status,
+   três botões e o aviso de permissão). O seletor abaixo tem duas
+   classes justamente para vencer aquele limite sem precisar de
+   "!important" — o estado recolhido continua valendo, pois lá o
+   "max-height: 0" já é "!important".
+   ------------------------------------------------------------ */
+.area-conexao {
+    margin-bottom: 20px;
+}
+
+.area-conexao .conteudo-conexao {
+    max-height: 900px;
 }
 /* ============================================================
    MÓDULO 10 — MENSAGENS FLUTUANTES (TOASTS)
@@ -1244,3 +1399,493 @@ footer.recolhido #toggleAbas:hover {
     opacity: 1;
 }
 
+
+/* ============================================================
+   MÓDULO 12 — VISUALIZADOR DE REGISTROS DO BANCO (PÁGINA BANCO)
+   O que este bloco faz: estiliza a lista de pacientes salvos que
+   aparece dentro da barra recolhível "BANCO DE DADOS", os cartões
+   que abrem em sanfona com os dados editáveis e os PDFs de cada
+   paciente.
+
+   Nada aqui inventa uma paleta nova: reaproveita as mesmas cores e
+   formas do resto do sistema — verde #283618 nas barras e botões,
+   #c7d59f nas bordas tracejadas, #f5f5f5 no fundo dos cartões de
+   dado e #2f3e1d nas bordas grossas dos campos de texto.
+   ============================================================ */
+
+/* A página BANCO centraliza tudo (ver MÓDULO 9); aqui o conteúdo
+   volta a ser alinhado à esquerda, como nas demais páginas.
+
+   REVISÃO (v1.5.3): este bloco passou a ser o PRIMEIRO da página e não
+   recolhe mais — por isso perdeu a classe ".area-dropzones" no HTML e
+   ganhou a margem inferior própria abaixo. O antigo teto de 900px em
+   ".conteudo-registros" (que existia só para animar o recolher) saiu
+   junto: sem ele a lista nunca corre risco de ficar cortada, e quem
+   controla a altura real continua sendo ".lista-registros". */
+.area-registros {
+    text-align: left;
+    margin-bottom: 20px;
+}
+
+/* ------------------------------------------------------------
+   RESUMO DO BANCO (primeira linha da lista)
+   Reaproveita inteiramente o visual das linhas de paciente
+   (".registro-item" / ".registro-cabecalho" / ".registro-corpo"):
+   fechado é uma linha só com os totais; aberto mostra os detalhes.
+   ------------------------------------------------------------ */
+.registro-item-resumo {
+    margin-bottom: 10px;
+}
+
+/* Nos cartões de paciente cada campo é um <input> editável; aqui os
+   valores são apenas texto, então repetem a mesma métrica do input
+   para que as duas caixas fiquem idênticas. */
+.valor-resumo {
+    color: black;
+    font-size: 13px;
+    padding: 2px 0;
+    border-bottom: 1px solid #b9c4a1;
+    word-break: break-word;
+}
+
+/* ------------------------------------------------------------
+   BARRA DE PESQUISA
+   ------------------------------------------------------------ */
+.barra-busca-registros {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+/* Mesma linguagem visual do campo "Pesquisar Paciente..." das outras
+   páginas (borda grossa #2f3e1d, fundo branco, texto em negrito),
+   mas ocupando toda a largura disponível em vez de 800px fixos. */
+.campo-busca-registros {
+    flex: 1;
+    height: 45px;
+    padding: 0 15px;
+    border: 10px solid #2f3e1d;
+    border-radius: 0;
+    background: white;
+    color: black;
+    font-family: Arial, Helvetica, sans-serif;
+    font-weight: bold;
+    font-size: 14px;
+    outline: none;
+}
+
+.campo-busca-registros::placeholder {
+    color: #6b6b6b;
+    font-weight: normal;
+}
+
+/* ------------------------------------------------------------
+   BOTÕES DA ÁREA DE REGISTROS
+   Os botões do sistema têm margem e recheio generosos (regra global
+   do MÓDULO 6). Dentro dos cartões eles precisam ser compactos, sem
+   mudar de cor nem de formato. ------------------------------------ */
+.btn-registro {
+    margin: 0;
+    padding: 0 18px;
+    height: 45px;
+    border: none;
+    border-radius: 0;
+    background: #283618;
+    color: white;
+    font-weight: bold;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.2s ease, opacity 0.2s ease;
+}
+
+.btn-registro:hover {
+    background: #1d2911;
+}
+
+.btn-registro:disabled {
+    opacity: 0.45;
+    cursor: default;
+    background: #283618;
+}
+
+.btn-registro:focus-visible {
+    outline: 2px solid #ffffff;
+    outline-offset: -2px;
+}
+
+/* Variante do botão de excluir: mesma forma, cor de alerta — igual à
+   usada nos toasts de erro do sistema. */
+.btn-registro-perigo {
+    background: #7a1f1f;
+}
+
+.btn-registro-perigo:hover {
+    background: #5e1717;
+}
+
+/* ------------------------------------------------------------
+   LISTA
+   ------------------------------------------------------------ */
+.lista-registros {
+    max-height: 705px;
+    overflow-y: auto;
+    border: 3px dashed #c7d59f;
+    padding: 10px;
+    background: #353d1a55;
+}
+
+.lista-registros-vazia {
+    padding: 25px 10px;
+    text-align: center;
+    color: #e8ecd8;
+    font-size: 14px;
+}
+
+.registro-item {
+    margin-bottom: 8px;
+}
+
+.registro-item:last-child {
+    margin-bottom: 0;
+}
+
+/* Linha fechada: PACIENTE — OM — DATA — ESPECIALIDADE. */
+.registro-cabecalho {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    margin: 0;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 0;
+    background: #283618;
+    color: white;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 13px;
+    font-weight: bold;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.registro-cabecalho:hover {
+    background: #1d2911;
+}
+
+.registro-cabecalho:focus-visible {
+    outline: 2px solid #ffffff;
+    outline-offset: -2px;
+}
+
+.registro-item.aberto > .registro-cabecalho {
+    background: #1d2911;
+}
+
+/* Colunas do cabeçalho: o nome do paciente manda, o resto divide o
+   espaço restante em partes iguais. */
+.registro-col {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.registro-col-paciente {
+    flex: 2 1 0;
+}
+
+.registro-col-secundaria {
+    flex: 1 1 0;
+    font-weight: normal;
+    color: #dce3c6;
+}
+
+/* Mesma técnica das outras duas setas do sistema (ver as notas em
+   ".icone-toggle-abas", no MÓDULO 8, e ".icone-toggle-dropzone", no
+   MÓDULO 4): triângulo desenhado em CSS em vez do caractere "▼", para
+   ficar sempre centralizado dentro da própria caixinha. */
+.registro-seta {
+    flex: 0 0 auto;
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    font-size: 0;
+    position: relative;
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.27);
+}
+
+.registro-seta::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid currentColor;
+}
+
+.registro-item.aberto .registro-seta {
+    transform: rotate(-180deg);
+}
+
+/* ------------------------------------------------------------
+   CORPO DO CARTÃO ABERTO
+   ------------------------------------------------------------ */
+/* REVISÃO (v1.5.3): o corpo aberto usava a MESMA borda tracejada clara
+   (3px dashed #c7d59f) da caixa que envolve a lista inteira
+   (".lista-registros"). Com o cartão aberto, as duas linhas tracejadas
+   ficavam quase encostadas e com o mesmo desenho, e não dava mais para
+   distinguir onde terminava o paciente e onde terminava a lista.
+
+   Agora a moldura é SÓLIDA e usa exatamente a cor da barra fechada do
+   paciente (#283618): o corpo aberto passa a ler como uma extensão da
+   própria barra — um cartão único — e nada mais no bloco repete o
+   tracejado claro da caixa externa. */
+.registro-corpo {
+    border: 3px solid #283618;
+    border-top: none;
+    padding: 15px;
+    background: #353d1a99;
+}
+
+/* ------------------------------------------------------------
+   ANIMAÇÃO DE ABRIR/FECHAR (v1.5.4)
+   Vale para o corpo dos cartões de paciente e para a linha de resumo;
+   quem liga e desliga estas duas classes são as funções abrirSanfona e
+   fecharSanfona (MÓDULO 22 do script.js), que também medem a altura
+   real do conteúdo — daí não haver nenhum valor de altura aqui.
+
+   As duas classes só existem DURANTE a animação: terminada a abertura,
+   o bloco volta a ser um elemento comum, de altura livre.
+
+   Além da altura, o recheio e a borda de baixo também encolhem: sem
+   isso o bloco pararia de encolher em uns 30px em vez de sumir por
+   completo, já que recheio e borda não cabem dentro de altura zero.
+   ------------------------------------------------------------ */
+.sanfona-animando {
+    overflow: hidden;
+    transition: max-height 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+                padding-top 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+                padding-bottom 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+                border-bottom-width 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.24s ease-in-out;
+}
+
+.sanfona-fechada {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-bottom-width: 0;
+    opacity: 0;
+}
+
+/* Quem configurou o sistema operacional para reduzir animações não vê
+   a transição (o JS também já pula a animação nesse caso — esta regra
+   é a garantia do lado do CSS). */
+@media (prefers-reduced-motion: reduce) {
+    .sanfona-animando {
+        transition: none;
+    }
+}
+
+.registro-subtitulo {
+    font-size: 12px;
+    font-weight: bold;
+    color: #c7d59f;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+/* Campos editáveis em grade — mesma ideia dos cartões "Dados
+   Extraídos" (fundo claro, borda verde), agora com um campo de
+   digitação no lugar do texto fixo. */
+.registro-campos {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.campo-registro {
+    background: #f5f5f5;
+    border: 2px solid #2f3e1d;
+    border-radius: 6px;
+    padding: 8px 10px;
+}
+
+.campo-registro label {
+    display: block;
+    font-size: 11px;
+    font-weight: bold;
+    color: #283618;
+    margin-bottom: 3px;
+}
+
+.campo-registro input {
+    width: 100%;
+    border: none;
+    border-bottom: 1px solid #b9c4a1;
+    border-radius: 0;
+    background: transparent;
+    color: black;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 13px;
+    padding: 2px 0;
+    outline: none;
+}
+
+.campo-registro input:focus {
+    border-bottom: 1px solid #283618;
+}
+
+/* Campo largo (Local costuma ser um endereço comprido). */
+.campo-registro-largo {
+    grid-column: span 2;
+}
+
+/* ------------------------------------------------------------
+   ARQUIVOS DO PACIENTE
+   ------------------------------------------------------------ */
+.registro-arquivos {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.arquivo-registro {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #f5f5f5;
+    border: 2px solid #2f3e1d;
+    border-radius: 6px;
+    padding: 7px 10px;
+}
+
+.arquivo-registro-nome {
+    flex: 1;
+    color: black;
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.arquivo-registro-aviso {
+    color: #283618;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.btn-arquivo-registro {
+    margin: 0;
+    padding: 6px 14px;
+    height: auto;
+    font-size: 12px;
+}
+
+/* Anexar/substituir PDF: mesma dropzone tracejada do resto do
+   sistema, só que mais baixa por estar dentro de um cartão. */
+.linha-anexo-registro {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.dropzone-registro {
+    flex: 1;
+    margin-bottom: 0;
+    padding: 12px;
+    font-size: 14px;
+}
+
+.select-nome-anexo {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 0 12px;
+    height: auto;
+    border: none;
+    border-radius: 0;
+    background: #283618;
+    color: white;
+    font-weight: bold;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.select-nome-anexo:hover {
+    background: #1d2911;
+}
+
+/* ------------------------------------------------------------
+   RODAPÉ DE AÇÕES DO CARTÃO
+   ------------------------------------------------------------ */
+.registro-acoes {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    border-top: 1px solid rgba(199, 213, 159, 0.35);
+    padding-top: 12px;
+}
+
+.registro-acoes .select-usar-registro {
+    margin: 0;
+    padding: 0 12px;
+    height: 45px;
+    border: none;
+    border-radius: 0;
+    background: #283618;
+    color: white;
+    font-weight: bold;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.registro-acoes .select-usar-registro:hover {
+    background: #1d2911;
+}
+
+/* Empurra o botão de excluir para a ponta direita da linha. */
+.registro-acoes .btn-registro-perigo {
+    margin-left: auto;
+}
+
+/* ------------------------------------------------------------
+   RODAPÉ DA LISTA (contador + carregar mais)
+   ------------------------------------------------------------ */
+.rodape-registros {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.contador-registros {
+    color: #e8ecd8;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+/* Telas menores: a grade de campos vira duas colunas e depois uma. */
+@media (max-width: 900px) {
+    .registro-campos {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    .registro-campos {
+        grid-template-columns: 1fr;
+    }
+
+    .campo-registro-largo {
+        grid-column: span 1;
+    }
+}
