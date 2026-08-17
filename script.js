@@ -386,14 +386,42 @@ const omsConhecidas = {
 
 // Trecho do cargo (como aparece no PDF) -> categoria usada para decidir
 // pronome ("esse"/"essa") e tratamento ("Comandante"/"Chefe").
+// Algumas OM já aparecem abreviadas no DIEx, mas com grafia diferente da
+// usada em "omsConhecidas" (ex.: o HGuB assina como "H Gu Ba"). Este mapa
+// padroniza essas variações. Acrescente aqui novas grafias conforme forem
+// aparecendo — a comparação ignora acento, caixa e espaços.
+const siglasAlternativasOM = {
+    "H Gu Ba": "HGuB",
+    "HGuBa": "HGuB"
+};
+
+// A ORDEM IMPORTA: a busca é por "contém", então os termos mais
+// específicos precisam vir antes dos mais genéricos
+// (ex.: "CHEFE AO ESCALÃO" antes de "CHEFE").
 const cargosConhecidos = {
-    "COMANDANTE": "Comando",
+    "CHEFE AO ESCALAO": "Grande Comando",
+    "CHEFE AO ESCALÃO": "Grande Comando",
     "SUBCOMANDANTE": "Comando",
+    "COMANDANTE": "Comando",
+    // CORREÇÃO: DIEx assinado por Diretor/Diretora é DIREÇÃO, não Comando.
+    // Antes o sistema classificava como "Comando" e o texto saía
+    // "Informo a esse Comando..." num documento de Direção.
+    "SUBDIRETOR": "Direção",
+    "DIRETOR": "Direção",       // cobre DIRETOR, DIRETORA, SUBDIRETOR(A)
+    "DIREÇÃO": "Direção",
+    "DIRECAO": "Direção",
     "CHEFE": "Chefia",
-    "Chefe ao Escalão": "Grande Comando",
-    "DIRETOR": "Comando",
-    "SUBDIRETOR": "Comando",
-    "SUBDIRETOR(A)": "Comando"
+    "CHEFIA": "Chefia"
+};
+
+// Para cada tipo de OM, como tratá-la no texto do documento:
+//   {PRONOME} {TIPO_OM}  -> "esse Comando" / "essa Direção" / "essa Chefia"
+//   {CARGO_OM} do {OM}   -> "Comandante" / "Diretor" / "Chefe"
+const tratamentoPorTipoOM = {
+    "Comando":        { cargo: "Comandante", pronome: "esse" },
+    "Grande Comando": { cargo: "Comandante", pronome: "esse" },
+    "Chefia":         { cargo: "Chefe",      pronome: "essa" },
+    "Direção":        { cargo: "Diretor",    pronome: "essa" }
 };
 
 // Lista de especialidades médicas reconhecidas pelo sistema.
@@ -421,6 +449,126 @@ const mesesAbreviados = {
     "1": "JAN", "2": "FEV", "3": "MAR", "4": "ABR", "5": "MAIO", "6": "JUN",
     "7": "JUL", "8": "AGO", "9": "SET"
 };
+/* ============================================================
+   MÓDULO 4.1 — DIAGNÓSTICO DA EXTRAÇÃO (CONSOLE)
+   O que este bloco faz: registra no console do navegador (F12) tudo o
+   que o sistema leu dos PDFs e como chegou em cada valor final —
+   qual padrão (regex) casou, o que veio "cru" do PDF e qual correção
+   foi aplicada em cima disso.
+
+   Como usar:
+     • Abra o console (F12) e anexe os PDFs normalmente.
+     • Cada leitura imprime um grupo "TEXTO BRUTO DO PDF" e um grupo
+       "RASTREIO DA EXTRAÇÃO" com uma tabela campo a campo.
+     • Para desligar:  AutoMedDebug.desligar()   (fica salvo no navegador)
+     • Para religar:   AutoMedDebug.ligar()
+     • Para ver o último texto lido: AutoMedDebug.ultimoTexto()
+   ============================================================ */
+
+const DEBUG_EXTRACAO = { ativo: localStorage.getItem("automed_debug") !== "off" };
+
+// Guarda os últimos textos lidos, para inspeção manual no console.
+const ultimosTextosPDF = { agendamento: "", solicitacao: "", outro: "" };
+
+// Evita imprimir o mesmo rastreio várias vezes seguidas (a extração é
+// reexecutada a cada atualização de painel).
+let ultimaAssinaturaExtracao = "";
+
+window.AutoMedDebug = {
+    ligar() {
+        DEBUG_EXTRACAO.ativo = true;
+        localStorage.setItem("automed_debug", "on");
+        console.log("%c[AutoMed] Diagnóstico de extração LIGADO.", "color:#0a7;font-weight:bold");
+    },
+    desligar() {
+        DEBUG_EXTRACAO.ativo = false;
+        localStorage.setItem("automed_debug", "off");
+        console.log("%c[AutoMed] Diagnóstico de extração DESLIGADO.", "color:#a70;font-weight:bold");
+    },
+    ultimoTexto(qual = "solicitacao") {
+        return ultimosTextosPDF[qual] || "";
+    }
+};
+
+/**
+ * Cria um "rastreio": um acumulador de linhas que, no final, vira uma
+ * tabela no console mostrando CAMPO / BRUTO / FINAL / REGRA / CORREÇÃO.
+ *
+ * - registrar(): um campo extraído com sucesso (ou não).
+ * - nota():      um raciocínio/decisão que não é um campo (ex.: "usei o
+ *                padrão alternativo porque o principal não casou").
+ */
+function criarRastreio(titulo) {
+    const linhas = [];
+    const notas = [];
+
+    return {
+        registrar(campo, bruto, valorFinal, regra = "", correcao = "") {
+            linhas.push({
+                Campo: campo,
+                "Extraído do PDF (bruto)": bruto === undefined || bruto === null || bruto === ""
+                    ? "— (não encontrado)"
+                    : String(bruto),
+                "Valor final": valorFinal === undefined || valorFinal === null || valorFinal === ""
+                    ? "— (vazio)"
+                    : String(valorFinal),
+                "Regra usada": regra,
+                "Correção aplicada": correcao || (String(bruto ?? "") === String(valorFinal ?? "") ? "nenhuma" : "normalização")
+            });
+        },
+
+        nota(mensagem) {
+            notas.push(mensagem);
+        },
+
+        imprimir() {
+            if (!DEBUG_EXTRACAO.ativo) return;
+
+            console.groupCollapsed(`%c🩺 AutoMed — ${titulo}`, "color:#0a7;font-weight:bold");
+
+            if (typeof console.table === "function") {
+                console.table(linhas);
+            } else {
+                linhas.forEach(l => console.log(l));
+            }
+
+            if (notas.length) {
+                console.groupCollapsed("%c🧠 Como o sistema raciocinou", "color:#06c;font-weight:bold");
+                notas.forEach(n => console.log("•", n));
+                console.groupEnd();
+            }
+
+            // Campos que ficaram vazios são o ponto mais comum de erro:
+            // ganham um aviso separado para não se perderem na tabela.
+            const vazios = linhas.filter(l => l["Valor final"] === "— (vazio)").map(l => l.Campo);
+            if (vazios.length) {
+                console.warn("⚠️ Campos que NÃO foram preenchidos:", vazios.join(", "));
+            }
+
+            console.groupEnd();
+        }
+    };
+}
+
+/** Mostra no console o texto cru que o pdf.js conseguiu ler do arquivo. */
+function logTextoBrutoPDF(rotulo, nomeArquivo, texto, numPaginas) {
+    if (rotulo in ultimosTextosPDF) ultimosTextosPDF[rotulo] = texto;
+    else ultimosTextosPDF.outro = texto;
+
+    if (!DEBUG_EXTRACAO.ativo) return;
+
+    console.groupCollapsed(
+        `%c📄 AutoMed — TEXTO BRUTO DO PDF (${rotulo}): ${nomeArquivo}`,
+        "color:#a06;font-weight:bold"
+    );
+    console.log(`Páginas: ${numPaginas} | Caracteres lidos: ${texto.length}`);
+    console.log(texto);
+    if (!texto.trim()) {
+        console.warn("⚠️ O PDF não devolveu texto algum — provavelmente é um PDF digitalizado (imagem), sem camada de texto.");
+    }
+    console.groupEnd();
+}
+
 /* ============================================================
    MÓDULO 5 — UTILITÁRIOS DE TEXTO
    O que este arquivo faz: funções pequenas e genéricas de limpeza de
@@ -503,10 +651,55 @@ function formatarMedico(nome) {
         .replace(/\b\w/g, letra => letra.toUpperCase());
 }
 
-/** Devolve a sigla da OM se ela estiver cadastrada; senão, devolve o nome original. */
-function abreviarOM(om) {
+/** Chave de comparação "frouxa": sem acento, sem pontuação, sem espaço e em maiúsculas. */
+function chaveComparacao(texto) {
+    return String(texto || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")   // tira acentos
+        .replace(/[^a-zA-Z0-9]/g, "")      // tira espaços e pontuação
+        .toUpperCase();
+}
+
+/**
+ * Devolve a sigla da OM se ela estiver cadastrada; senão, devolve o nome original.
+ * A busca é feita em 3 passadas, da mais rígida para a mais tolerante:
+ *   1) nome exato como está no dicionário;
+ *   2) nome ignorando acento/caixa/espaço (o PDF varia muito);
+ *   3) o texto JÁ é uma sigla conhecida (ex.: "3º RCG") — devolve na forma oficial.
+ */
+function abreviarOM(om, rastreio = null) {
     if (!om) return "";
-    return omsConhecidas[om] || om;
+
+    if (omsConhecidas[om]) {
+        rastreio?.nota(`OM "${om}" encontrada no dicionário (nome exato) → sigla "${omsConhecidas[om]}".`);
+        return omsConhecidas[om];
+    }
+
+    const alvo = chaveComparacao(om);
+
+    for (const nomeCompleto in omsConhecidas) {
+        if (chaveComparacao(nomeCompleto) === alvo) {
+            rastreio?.nota(`OM "${om}" bateu com "${nomeCompleto}" ignorando acento/caixa/espaço → sigla "${omsConhecidas[nomeCompleto]}".`);
+            return omsConhecidas[nomeCompleto];
+        }
+    }
+
+    for (const nomeCompleto in omsConhecidas) {
+        if (chaveComparacao(omsConhecidas[nomeCompleto]) === alvo) {
+            rastreio?.nota(`O PDF já trouxe a OM abreviada ("${om}") → padronizada para "${omsConhecidas[nomeCompleto]}".`);
+            return omsConhecidas[nomeCompleto];
+        }
+    }
+
+    for (const variacao in siglasAlternativasOM) {
+        if (chaveComparacao(variacao) === alvo) {
+            rastreio?.nota(`Sigla "${om}" reconhecida como variação de "${siglasAlternativasOM[variacao]}" (mapa "siglasAlternativasOM").`);
+            return siglasAlternativasOM[variacao];
+        }
+    }
+
+    rastreio?.nota(`OM "${om}" NÃO está no dicionário "omsConhecidas" — mantida exatamente como veio do PDF. Se quiser a sigla oficial, cadastre-a nesse dicionário.`);
+    return om;
 }
 
 /** Procura, no texto, qual especialidade conhecida está presente e a devolve capitalizada. */
@@ -611,26 +804,79 @@ function extrair(texto, regex) {
     return normalizarTexto(match[1]);
 }
 
-/** Extrai o nome completo da OM que está solicitando o exame, a partir do PDF de Solicitação. */
-function extrairOMSolicitante(textoSolicitacao) {
-    const match = textoSolicitacao.match(
-        /(?:Do|Da|Ao)\s+(?:\S*comandante|Chefe|diretor)\s+(?:do|da|ao)\s+(.*?)\s+(?:Ao|À)/i
-    );
-    if (!match) return "";
-    return normalizarTexto(match[1]);
+/**
+ * Isola o "bloco do remetente" do DIEx — o trecho que vai do "Do/Da"
+ * até o destinatário ("Ao", "À", "A Sr..."). Ex.: "Diretor do H Gu Ba".
+ *
+ * CORREÇÃO: a versão anterior exigia que o destinatário começasse com
+ * "Ao" (regex /Do\s+(.*?)\s+Ao/). Em DIEx endereçados a uma mulher o
+ * cabeçalho é "À Sra Diretora do HMAPA", então nada casava e o sistema
+ * caía silenciosamente no padrão "Comando". Agora aceita Ao / À / A Sr(a)
+ * e ignora candidatos que não contenham um cargo conhecido (evita casar
+ * com "Do MINISTÉRIO DA DEFESA..." no cabeçalho).
+ */
+function extrairBlocoRemetente(textoSolicitacao, rastreio = null) {
+    if (!textoSolicitacao) return "";
+
+    // [\s\S] em vez de "." para funcionar mesmo com quebras de linha no meio.
+    const regex = /\bD[oa]\s+([\s\S]{3,120}?)\s+(?:Ao\b|A\s+Sr|À)/gi;
+
+    for (const match of textoSolicitacao.matchAll(regex)) {
+        const bloco = normalizarTexto(match[1]);
+
+        if (/(comandante|chefe|diretor|diretora|chefia|dire[çc][ãa]o)/i.test(bloco)) {
+            rastreio?.nota(`Bloco do remetente localizado entre "Do/Da" e o destinatário (Ao/À/A Sr): "${bloco}".`);
+            return bloco;
+        }
+
+        rastreio?.nota(`Trecho "${bloco}" descartado: não contém um cargo conhecido (comandante/chefe/diretor).`);
+    }
+
+    rastreio?.nota('Nenhum bloco "Do <cargo> ... Ao/À ..." foi encontrado no PDF de Solicitação.');
+    return "";
 }
 
-/** Identifica se a OM solicitante é do tipo "Comando" ou "Chefia", com base no cargo mencionado no texto. */
-function extrairTipoOM(textoSolicitacao) {
-    const match = textoSolicitacao.match(/Do\s+(.*?)\s+Ao/i);
-    if (!match) return "Comando";   // não achou o cargo: usa "Comando" como padrão seguro
+/** Extrai o nome completo da OM que está solicitando o exame, a partir do PDF de Solicitação. */
+function extrairOMSolicitante(textoSolicitacao, rastreio = null) {
+    const bloco = extrairBlocoRemetente(textoSolicitacao, rastreio);
+    if (!bloco) return "";
 
-    const cargo = normalizarTexto(match[1]).toUpperCase();
+    // "Diretor do H Gu Ba"          -> "H Gu Ba"
+    // "Comandante da 3ª Cia Inf"    -> "3ª Cia Inf"
+    // "Chefe da Seção de Saúde do X"-> "Seção de Saúde do X"  (corta só o 1º "do/da")
+    const match = bloco.match(/^(.*?)\s+(?:do|da|de|dos|das)\s+(.+)$/i);
+
+    if (!match) {
+        rastreio?.nota(`O bloco "${bloco}" não tem o formato "<cargo> do <OM>" — usado inteiro como nome da OM.`);
+        return bloco;
+    }
+
+    rastreio?.nota(`Cargo "${match[1]}" separado do nome da OM "${match[2]}".`);
+    return normalizarTexto(match[2]);
+}
+
+/**
+ * Classifica a OM solicitante em Comando / Direção / Chefia / Grande
+ * Comando, com base no cargo de quem assina o DIEx.
+ */
+function extrairTipoOM(textoSolicitacao, rastreio = null) {
+    const bloco = extrairBlocoRemetente(textoSolicitacao);
+
+    if (!bloco) {
+        rastreio?.nota('Cargo do remetente não identificado → assumido "Comando" (padrão).');
+        return "Comando";
+    }
+
+    const cargo = bloco.toUpperCase();
+
     for (const chave in cargosConhecidos) {
         if (cargo.includes(chave.toUpperCase())) {
+            rastreio?.nota(`Cargo "${bloco}" contém "${chave}" → tipo de OM = "${cargosConhecidos[chave]}".`);
             return cargosConhecidos[chave];
         }
     }
+
+    rastreio?.nota(`Cargo "${bloco}" não bateu com nenhum item de "cargosConhecidos" → assumido "Comando" (padrão).`);
     return "Comando";
 }
 
@@ -649,30 +895,47 @@ function extrairDadosCompletos(texto, textoSolicitacao) {
         extrair(texto, /Paciente:\s*\d+\s*-\s*(.*?)\s*Médico\(a\)\/Profissional:/i)
     ).replace(/\s{2,}/g, " ").trim();
 
+    const rastreio = criarRastreio("RASTREIO DA EXTRAÇÃO (Marcação + Solicitação)");
+    let regraPaciente = "Paciente: <cód> - <nome> ... Médico(a)/Profissional:";
+
     if (!paciente) {
+        rastreio.nota('Padrão principal do paciente não casou — tentando o alternativo ("Especialidade: ... Agendamento:").');
+        regraPaciente = "ALTERNATIVO: Especialidade: <nome> Agendamento:";
         paciente = normalizarTexto(
             extrair(texto, /Especialidade:\s*([A-ZÀ-Ú\s]+?)\s*Agendamento:/i)
         );
     }
 
+    rastreio.registrar("paciente", paciente, paciente, regraPaciente);
+
     // --- Médico: idem, com um padrão alternativo de fallback ---
     let medico = normalizarTexto(
         extrair(texto, /Médico\(a\)\/Profissional:\s*([A-ZÀ-Ú]+)/i)
     );
+    let regraMedico = "Médico(a)/Profissional: <nome>";
 
     if (!medico) {
+        rastreio.nota('Padrão principal do médico não casou — tentando o alternativo ("Usuário Marcação: ... Médico/Prof.:").');
+        regraMedico = "ALTERNATIVO: Usuário Marcação: ... Médico/Prof.:";
         const match = texto.match(
             /Usuário Marcação:\s*[A-ZÀ-Ú]+\s*([A-ZÀ-Ú]+)\s*Médico\/Prof\.:/i
         );
         if (match) medico = normalizarTexto(match[1]);
     }
 
+    rastreio.registrar("medico", medico, medico, regraMedico);
+
     // --- Data e hora da consulta ---
     let dataHora = extrair(
         texto, /Dia da Consulta:\s*([0-9\/]{10}\s*-\s*[0-9:]{5})/i
     );
 
+    let regraDataHora = "Dia da Consulta: dd/mm/aaaa - hh:mm";
+
     if (!dataHora) {
+        rastreio.nota('Padrão "Dia da Consulta:" não casou — montando a data/hora a partir de "Agendamento:" + primeiro horário do texto.');
+        regraDataHora = "ALTERNATIVO: Agendamento: <data> + primeiro hh:mm do texto";
+
         const dataTmp = extrair(texto, /Agendamento:\s*([0-9\/]{10})/i);
         const horaTmp = extrair(texto, /([0-9]{2}:[0-9]{2})/i);
 
@@ -690,10 +953,16 @@ function extrairDadosCompletos(texto, textoSolicitacao) {
         horario = partes[1].trim();
     }
 
+    rastreio.registrar("dataHora", dataHora, dataHora, regraDataHora);
+    rastreio.registrar("data / horario", dataHora, `${data} | ${horario}`, "separação pelo hífen", "dataHora dividida em data e horário");
+
     // --- Local do atendimento: padrão principal e um alternativo ---
     let local = extrair(
         texto, /Local da Consulta:\s*(.*?)Usuário da Marcação/i
     );
+
+    const localBruto = local;
+    let regraLocal = "Local da Consulta: ... Usuário da Marcação";
 
     if (local) {
         const match = local.match(/(.*?)\s*-\s*(.*)/i);
@@ -705,6 +974,9 @@ function extrairDadosCompletos(texto, textoSolicitacao) {
     }
 
     if (!local) {
+        rastreio.nota('Padrão principal do local não casou — tentando o alternativo ("manhã/tarde ... Local Consulta: ... Usuário Marcação:").');
+        regraLocal = "ALTERNATIVO: manhã|tarde ... Local Consulta: ... Usuário Marcação:";
+
         const match = texto.match(
             /(?:manh[aã]|tarde)\s+(.*?)\s+Local\s+Consulta:\s*(.*?)\s*Usuário\s+Marcação:/i
         );
@@ -715,6 +987,11 @@ function extrairDadosCompletos(texto, textoSolicitacao) {
         }
     }
 
+    rastreio.registrar(
+        "local", localBruto, local, regraLocal,
+        localBruto === local ? "nenhuma" : 'hífen virou vírgula, capitalização e "nº" no número da sala'
+    );
+
     // --- Número do DIEx de solicitação (se o PDF de solicitação foi anexado) ---
     let numeroDIEx = "";
     if (textoSolicitacao) {
@@ -722,6 +999,9 @@ function extrairDadosCompletos(texto, textoSolicitacao) {
         if (matchNum) {
             numeroDIEx = matchNum[1];
         }
+        rastreio.registrar("numeroDIEx", matchNum?.[0], numeroDIEx, "DIEx nº <número>", "mantido só o número");
+    } else {
+        rastreio.nota("PDF de Solicitação não anexado — OM, tipo de OM, número e data do DIEx ficarão em branco.");
     }
 
     // --- Data do DIEx de solicitação: tenta 4 formatos diferentes, em ordem de prioridade ---
@@ -739,15 +1019,25 @@ function extrairDadosCompletos(texto, textoSolicitacao) {
         const matchDataMilitar = textoSolicitacao.match(/de\s+(\d{1,2})\s+([A-Z]{3})\s+(\d{2,4})/i);
         const matchDataAssinatura = textoSolicitacao.match(/em\s+(\d{1,2}\/\d{1,2}\/\d{2,4}),?\s*às/i);
 
+        let regraDataDIEx = "";
+        let brutoDataDIEx = "";
+
         if (matchDataExtenso) {
             // Ex.: "5 de junho de 2026"
+            regraDataDIEx = "1º) data por extenso: <dia> de <mês> de <ano>";
+            brutoDataDIEx = matchDataExtenso[0];
             const dia = matchDataExtenso[1].padStart(2, '0');
             const mesNome = matchDataExtenso[2].toLowerCase();
             const ano = matchDataExtenso[3].length === 2 ? `20${matchDataExtenso[3]}` : matchDataExtenso[3];
             const mes = mesesNum[mesNome] || "01";
+            if (!mesesNum[mesNome]) {
+                rastreio.nota(`⚠️ Mês "${matchDataExtenso[2]}" não reconhecido na data do DIEx — assumido "01" (janeiro).`);
+            }
             dataDIEx = `${dia}/${mes}/${ano}`;
         } else if (matchDataMilitar) {
             // Ex.: "de 5 JUN 26"
+            regraDataDIEx = "2º) data militar: de <dia> <MES> <ano>";
+            brutoDataDIEx = matchDataMilitar[0];
             const dia = matchDataMilitar[1].padStart(2, '0');
             const mesNome = matchDataMilitar[2].toLowerCase();
             const ano = matchDataMilitar[3].length === 2 ? `20${matchDataMilitar[3]}` : matchDataMilitar[3];
@@ -755,29 +1045,60 @@ function extrairDadosCompletos(texto, textoSolicitacao) {
             dataDIEx = `${dia}/${mes}/${ano}`;
         } else if (matchDataAssinatura) {
             // Ex.: "...em 05/06/2026, às..."
+            regraDataDIEx = "3º) data da assinatura eletrônica: em <dd/mm/aaaa>, às";
+            brutoDataDIEx = matchDataAssinatura[0];
             dataDIEx = formatarData(matchDataAssinatura[1]);
         } else {
             // Último recurso: qualquer data solta no texto que não seja a data de nascimento.
+            regraDataDIEx = "4º) ÚLTIMO RECURSO: primeira data solta do texto";
             const matchDataSeparador = textoSolicitacao.match(/(?<!Nascimento:\s*)\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/i);
             if (matchDataSeparador) {
+                brutoDataDIEx = matchDataSeparador[0];
                 dataDIEx = formatarData(matchDataSeparador[1]);
+                rastreio.nota(`⚠️ A data do DIEx veio do último recurso (data solta no texto): "${brutoDataDIEx}". Confira se é mesmo a data do documento.`);
             }
         }
+
+        rastreio.registrar("dataDIEx", brutoDataDIEx, dataDIEx, regraDataDIEx, "convertida para dd/mm/aaaa");
     }
 
     // --- Campos derivados (calculados a partir dos anteriores) ---
     const especialidade = formatarEspecialidade(texto);
     const especialidadeCrua = extrairEspecialidadeCrua(texto);
 
-    const om = extrairOMSolicitante(textoSolicitacao);
-    const omAbr = abreviarOM(om);
-    const tipoOM = extrairTipoOM(textoSolicitacao);
+    rastreio.registrar(
+        "especialidade", especialidadeCrua, especialidade,
+        "primeira especialidade da lista 'especialidadesConhecidas' encontrada no texto",
+        especialidadeCrua ? "capitalizada" : "nenhuma especialidade da lista foi encontrada no PDF"
+    );
 
-    const cargoOM = tipoOM === "Comando" ? "Comandante" : "Chefe";
-    const pronome = tipoOM === "Comando" ? "esse" : "essa";
+    const om = extrairOMSolicitante(textoSolicitacao, rastreio);
+    const omAbr = abreviarOM(om, rastreio);
+    const tipoOM = extrairTipoOM(textoSolicitacao, rastreio);
+
+    // CORREÇÃO: antes só existiam duas saídas ("Comando" ou "Chefe"/"essa"),
+    // então um DIEx de Direção era tratado como Comando. Agora cada tipo de
+    // OM tem seu próprio tratamento.
+    const tratamento = tratamentoPorTipoOM[tipoOM] || tratamentoPorTipoOM["Comando"];
+    const cargoOM = tratamento.cargo;
+    const pronome = tratamento.pronome;
+
+    rastreio.registrar("om", om, omAbr, "bloco 'Do <cargo> do <OM>' do DIEx", om === omAbr ? "nenhuma (não cadastrada em omsConhecidas)" : "trocada pela sigla oficial");
+    rastreio.registrar("tipoOM", om ? `cargo do remetente` : "", tipoOM, "dicionário 'cargosConhecidos'", `texto sairá como "${pronome} ${tipoOM}" e "${cargoOM} do ${omAbr || "<OM>"}"`);
 
     const dataMilitar = formatarDataMilitar(data);
     const dataNomeArquivo = formatarDataNomeArquivo(data);
+
+    rastreio.registrar("dataMilitar", data, dataMilitar, "dd/mm/aaaa → d MES aa", "formato militar");
+
+    // A extração roda várias vezes (a cada atualização de painel) com o mesmo
+    // conteúdo. Só imprime quando o par de PDFs realmente mudou, para o console
+    // não encher de grupos repetidos.
+    const assinatura = `${texto.length}|${(textoSolicitacao || "").length}|${paciente}|${omAbr}`;
+    if (assinatura !== ultimaAssinaturaExtracao) {
+        ultimaAssinaturaExtracao = assinatura;
+        rastreio.imprimir();
+    }
 
     return {
         paciente, medico, dataHora, data, horario, local, especialidade, especialidadeCrua,
@@ -811,6 +1132,17 @@ function extrairDadosComissaoEtica(texto) {
     const data = matchData ? matchData[1] : "";
     const dataFormatada = data ? formatarDataAbreviada(data) : "";
 
+    const assinatura = `etica|${texto.length}|${paciente}|${sessao}`;
+    if (assinatura !== ultimaAssinaturaExtracao) {
+        ultimaAssinaturaExtracao = assinatura;
+
+        const rastreio = criarRastreio("RASTREIO DA EXTRAÇÃO (Comissão de Ética)");
+        rastreio.registrar("sessao", matchSessao?.[1], sessao, "Sessão: <n>/<ano>", "espaços removidos");
+        rastreio.registrar("paciente", matchPaciente?.[1], paciente, "Paciente: <nome> Solicitante", "convertido para MAIÚSCULAS");
+        rastreio.registrar("data", data, dataFormatada, "primeira data dd/mm/aaaa do texto", "convertida para o formato militar");
+        rastreio.imprimir();
+    }
+
     return { sessao, paciente, data, dataFormatada };
 }
 /* ============================================================
@@ -827,8 +1159,9 @@ function extrairDadosComissaoEtica(texto) {
  * @param {string} idElementoNome - id do elemento onde exibir o nome do arquivo.
  * @param {(texto:string)=>void} aoConcluir - chamado com o texto lido, quando pronto.
  * @param {string} mensagemErro - mensagem exibida em um toast caso a leitura falhe.
+ * @param {string} rotulo - identifica o PDF no console ("agendamento", "solicitacao", ...).
  */
-function lerTextoDePDF(file, idElementoNome, aoConcluir, mensagemErro) {
+function lerTextoDePDF(file, idElementoNome, aoConcluir, mensagemErro, rotulo = "outro") {
     // Mostra o nome do arquivo imediatamente, antes mesmo da leitura terminar
     // (feedback visual rápido para o usuário).
     document.getElementById(idElementoNome).textContent = file.name;
@@ -849,10 +1182,14 @@ function lerTextoDePDF(file, idElementoNome, aoConcluir, mensagemErro) {
                 texto += content.items.map(item => item.str).join(" ") + " ";
             }
 
+            // Diagnóstico: mostra no console exatamente o que o pdf.js leu,
+            // antes de qualquer regex rodar em cima.
+            logTextoBrutoPDF(rotulo, file.name, texto, pdf.numPages);
+
             aoConcluir(texto);
 
         } catch (erro) {
-            console.error(erro);
+            console.error("Falha ao ler o PDF:", file.name, erro);
             mostrarToast(mensagemErro, "erro");
         }
     };
@@ -884,7 +1221,8 @@ function lerPDF(file) {
             textoPDF = texto;
             atualizarPainelLME();
         },
-        "Erro ao ler o PDF."
+        "Erro ao ler o PDF.",
+        "agendamento"
     );
 }
 
@@ -899,7 +1237,8 @@ function lerPDFSolicitacao(file) {
             textoPDFSolicitacao = texto;
             atualizarPainelLME();
         },
-        "Erro ao ler PDF de solicitação."
+        "Erro ao ler PDF de solicitação.",
+        "solicitacao"
     );
 }
 
@@ -913,7 +1252,8 @@ function lerConsultaDoc(file) {
             textoConsultaDoc = texto;
             atualizarPainelDocLmeScan();
         },
-        "Erro ao ler o PDF de Marcação."
+        "Erro ao ler o PDF de Marcação.",
+        "agendamento"
     );
 }
 
@@ -925,7 +1265,8 @@ function lerSolicitacaoDoc(file) {
             textoSolicitacaoDoc = texto;
             atualizarPainelDocLmeScan();
         },
-        "Erro ao ler o PDF de Solicitação."
+        "Erro ao ler o PDF de Solicitação.",
+        "solicitacao"
     );
 }
 
@@ -947,7 +1288,8 @@ function lerComissaoEtica(file) {
             textoComissaoEtica = texto;
             atualizarPainelComissaoEtica();
         },
-        "Erro ao ler o PDF da Comissão de Ética."
+        "Erro ao ler o PDF da Comissão de Ética.",
+        "comissao-etica"
     );
 }
 
@@ -962,7 +1304,8 @@ function lerExcelAgendamento(file) {
             dadosBancoCarregados = null;
             atualizarLinhaExcel();
         },
-        "Erro ao ler PDF de Agendamento."
+        "Erro ao ler PDF de Agendamento.",
+        "agendamento"
     );
 }
 
@@ -975,7 +1318,8 @@ function lerExcelSolicitacao(file) {
             dadosBancoCarregados = null;
             atualizarLinhaExcel();
         },
-        "Erro ao ler PDF de Solicitação."
+        "Erro ao ler PDF de Solicitação.",
+        "solicitacao"
     );
 }
 /* ============================================================
