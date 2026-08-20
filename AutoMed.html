@@ -16,22 +16,23 @@
 <!-- ============================================================
      PÁGINA "LME" (GERADOR DE DIEx DE LME)
      ============================================================ -->
-<div class="pagina ativa" id="pagina-lme">
+<div class="pagina" id="pagina-lme">
 
         <div class="container">
 
             <h1>GERADOR DIEX DE LME</h1>
 
-            <!-- BARRA DE CONTROLE DO BANCO (TOPO) -->
+            <!-- BARRA DE PESQUISA DE PACIENTES (TOPO)
+                 v1.6.3: EXCLUIR e SALVAR saíram daqui — cadastrar e excluir
+                 paciente agora só acontece pela página BANCO (v1.6.2). O
+                 botão ao lado da pesquisa leva direto ao registro deste
+                 paciente na página BANCO. -->
             <div class="barra-banco-superior">
-                <button id="btnExcluirBanco" class="btn-banco-topo">EXCLUIR</button>
-
                 <div class="grupo-select-central">
                     <input type="text" id="inputPesquisaBanco" class="select-banco-topo" placeholder="Pesquisar Paciente..." list="listaPacientesBanco" autocomplete="off">
                     <datalist id="listaPacientesBanco"></datalist>
+                    <button type="button" id="btnAbrirNoBancoLme" class="btn-banco-topo" title="Abrir este paciente na página BANCO">ABRIR NO BANCO</button>
                 </div>
-
-                <button id="btnInserirBanco" class="btn-banco-topo">SALVAR</button>
             </div>
 
             <!-- CONJUNTO DE DROPZONES DE LME -->
@@ -187,6 +188,7 @@
         <div class="barra-banco-superior">
             <div class="grupo-select-central">
                 <input type="text" id="inputPesquisaExcel" class="select-banco-topo" placeholder="Pesquisar Paciente..." list="listaPacientesBanco" autocomplete="off">
+                <button type="button" id="btnAbrirNoBancoExcel" class="btn-banco-topo" title="Abrir este paciente na página BANCO">ABRIR NO BANCO</button>
             </div>
         </div>
 
@@ -236,6 +238,7 @@
             </select>
 
             <input type="text" id="inputPesquisaDoc" class="select-banco-topo" placeholder="Pesquisar Paciente..." list="listaPacientesBanco" autocomplete="off">
+            <button type="button" id="btnAbrirNoBancoDoc" class="btn-banco-topo" title="Abrir este paciente na página BANCO">ABRIR NO BANCO</button>
         </div>
 
         <div id="blocoLmeScan">
@@ -330,36 +333,181 @@
 <!-- ============================================================
      PÁGINA "BANCO"
      ============================================================ -->
-<div class="pagina" id="pagina-banco">
+<div class="pagina ativa" id="pagina-banco">
     <div class="container">
-        <h1>GERENCIADOR DO BANCO DE DADOS</h1>
+        <h1>PAINEL DE CONTROLE</h1>
 
-        <div class="cartao-conexao">
-            <p>Selecione a pasta no seu computador onde os dados dos pacientes serão armazenados.</p>
-            <div id="statusBanco" class="status-banco-grande">DESCONECTADO</div>
-            <button id="btnConectarBanco" class="btn-conectar-central">CONECTAR PASTA DO BANCO</button>
+        <!-- ============================================================
+             FAIXA DE STATUS + CONEXÃO (v1.6.1) — o "cabeçalho" da página
+             inicial e, agora, o ÚNICO lugar do sistema que fala de
+             conectar a pasta do banco. Usa os mesmos cartões claros de
+             "Dados Extraídos" das outras páginas, para não inventar
+             linguagem visual nova. Mostra de relance o estado do banco e
+             quanto trabalho ainda falta; os números vêm de
+             atualizarPainelInicialBanco (MÓDULO 22).
 
-            <!-- FUNCIONALIDADE NOVA: backup do banco em um único arquivo .json,
-                 para não depender só da pasta local (pen drive, nuvem, etc.). -->
-            <button id="btnExportarBackup" type="button">EXPORTAR BACKUP (.JSON)</button>
-            <button id="btnImportarBackup" type="button">IMPORTAR BACKUP (.JSON)</button>
+             REVISÃO: a antiga caixa grande "CONEXÃO DO BANCO", lá no fim
+             da página, foi excluída. Suas duas funções que não tinham
+             equivalente aqui em cima — EXPORTAR e IMPORTAR BACKUP —
+             mudaram para o bloco logo abaixo, que abre/fecha com a MESMA
+             animação de sanfona já usada no RESUMO DO BANCO (ver
+             alternarBackupBanco, MÓDULO 22), só que oculto por padrão
+             para não poluir a tela: pouca gente exporta/importa backup
+             todo dia, então isso não precisa ficar sempre à mostra. -->
+        <div class="painel-inicial" id="painelInicialBanco">
+            <div class="cartao-status" id="cartaoStatusConexao">
+                <div class="titulo">Pasta do banco</div>
+                <div class="valor" id="statusConexaoTopo">DESCONECTADO</div>
+            </div>
+            <div class="cartao-status">
+                <div class="titulo">Pacientes</div>
+                <div class="valor" id="statusTotalTopo">0</div>
+            </div>
+
+            <div class="cartao-status-acao" id="acaoConectarTopo">
+                <button type="button" id="btnConectarBanco" class="btn-conectar-topo">CONECTAR PASTA DO BANCO</button>
+            </div>
+
+            <button type="button" id="btnToggleBackupBanco" class="btn-toggle-backup" title="Mostrar/ocultar backup do banco" aria-expanded="false" aria-controls="areaBackupBanco">
+                <span class="icone-toggle-dropzone">▼</span>
+            </button>
+        </div>
+
+        <div class="area-backup-banco oculto" id="areaBackupBanco">
+            <!-- Só aparece com o banco já conectado: reconectar só faz
+                 sentido para TROCAR de pasta, não para a primeira conexão
+                 (que já tem seu próprio botão acima). -->
+            <button id="btnReconectarBanco" type="button" class="btn-registro oculto">RECONECTAR PASTA DO BANCO</button>
+            <button id="btnExportarBackup" type="button" class="btn-registro">EXPORTAR BACKUP (.JSON)</button>
+            <button id="btnImportarBackup" type="button" class="btn-registro">IMPORTAR BACKUP (.JSON)</button>
             <input type="file" id="inputImportarBackup" accept=".json">
         </div>
 
-        <!-- FUNCIONALIDADE NOVA: resumo do banco conectado (total de
-             pacientes, OMs e especialidades mais frequentes). Some quando
-             não há pacientes e reaparece sozinho ao conectar/atualizar. -->
-        <div id="estatisticasBanco" class="info-banco oculto">
-            <p><strong>Total de pacientes cadastrados:</strong> <span id="statTotalPacientes">0</span></p>
-            <p><strong>OMs mais frequentes:</strong> <span id="statTopOMs">-</span></p>
-            <p><strong>Especialidades mais frequentes:</strong> <span id="statTopEspecialidades">-</span></p>
+        <!-- ============================================================
+             ADICIONAR PACIENTE PELA PÁGINA INICIAL (v1.6.2)
+             As mesmas duas dropzones da página LME, agora aqui: o
+             cadastro de um paciente novo deixa de exigir uma viagem até
+             outra aba. Ficam em UMA linha só (lado a lado, com os botões
+             na mesma faixa) porque a meta desta página é caber inteira na
+             tela, sem rolagem — foi também por isso que o antigo RESUMO
+             DO BANCO saiu daqui.
+
+             Os DADOS EXTRAÍDOS destes PDFs ficam num painel retrátil
+             (botão ▼ ao lado de LIMPAR): serve para conferir o que o
+             sistema leu antes de gravar, mas não precisa ocupar espaço o
+             tempo todo. Ver MÓDULO 23 do script.js.
+             ============================================================ -->
+        <div class="area-adicionar-banco" id="areaAdicionarBanco">
+            <div class="linha-adicionar-banco">
+                <div id="dropZoneBancoAgendamento" class="dropZoneDoc dropzone-banco">
+                    <div class="textoDrop">Clique ou Arraste o PDF de Agendamento</div>
+                    <div id="nomeArquivoBancoAgendamento" class="nomeArquivo"></div>
+                    <input type="file" id="pdfBancoAgendamento" accept=".pdf">
+                </div>
+
+                <div id="dropZoneBancoSolicitacao" class="dropZoneDoc dropzone-banco">
+                    <div class="textoDrop">Clique ou Arraste o PDF do DIEx de Solicitação</div>
+                    <div id="nomeArquivoBancoSolicitacao" class="nomeArquivo"></div>
+                    <input type="file" id="pdfBancoSolicitacao" accept=".pdf">
+                </div>
+
+                <button type="button" id="btnAdicionarPacienteBanco" class="btn-registro btn-adicionar-banco" title="Grava este paciente na pasta do banco">ADICIONAR PACIENTE</button>
+                <button type="button" id="btnLimparAdicionarBanco" class="btn-registro" title="Descarta os PDFs anexados aqui">LIMPAR</button>
+
+                <button type="button" id="btnToggleExtraidosBanco" class="btn-toggle-backup" title="Mostrar/ocultar os dados extraídos dos PDFs" aria-expanded="false" aria-controls="areaExtraidosBanco">
+                    <span class="icone-toggle-dropzone">▼</span>
+                </button>
+            </div>
+
+            <div class="area-extraidos-banco" id="areaExtraidosBanco">
+                <div class="dados-extraidos-banco">
+                    <div class="item-dado">
+                        <div class="titulo">Paciente</div>
+                        <div id="dbgPacienteBanco" class="valor">-</div>
+                    </div>
+                    <div class="item-dado">
+                        <div class="titulo">Médico</div>
+                        <div id="dbgMedicoBanco" class="valor">-</div>
+                    </div>
+                    <div class="item-dado">
+                        <div class="titulo">Especialidade</div>
+                        <div id="dbgEspecialidadeBanco" class="valor">-</div>
+                    </div>
+                    <div class="item-dado">
+                        <div class="titulo">Data / Hora</div>
+                        <div id="dbgDataHoraBanco" class="valor">-</div>
+                    </div>
+                    <div class="item-dado">
+                        <div class="titulo">Local</div>
+                        <div id="dbgLocalBanco" class="valor">-</div>
+                    </div>
+                    <div class="item-dado">
+                        <div class="titulo">OM Solicitante</div>
+                        <div id="dbgOMBanco" class="valor">-</div>
+                    </div>
+                    <div class="item-dado">
+                        <div class="titulo">OM Abreviada</div>
+                        <div id="dbgOMAbrBanco" class="valor">-</div>
+                    </div>
+                    <div class="item-dado">
+                        <div class="titulo">Tipo OM</div>
+                        <div id="dbgTipoOMBanco" class="valor">-</div>
+                    </div>
+                    <div class="item-dado">
+                        <div class="titulo">Nº do DIEx</div>
+                        <div id="dbgNumeroDIExBanco" class="valor">-</div>
+                    </div>
+                    <div class="item-dado">
+                        <div class="titulo">Data do DIEx</div>
+                        <div id="dbgDataDIExBanco" class="valor">-</div>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <div class="info-banco">
-            <p><strong>Atenção:</strong> O navegador solicita permissão toda vez que o sistema é recarregado por questões de segurança.</p>
+        <!-- ============================================================
+             VISUALIZADOR DE REGISTROS (v1.5.3) — BLOCO FIXO
+             É o conteúdo principal da página e por isso vem primeiro e
+             NÃO recolhe. Também não leva barra de título: o título da
+             página logo acima ("GERENCIADOR DO BANCO DE DADOS") já diz
+             o que é esta lista, e uma segunda faixa escrita "BANCO DE
+             DADOS" só repetia a mesma informação. Quem recolhe agora é
+             o bloco de CONEXÃO, mais abaixo.
+             O conteúdo da lista em si é montado pelo MÓDULO 22 do
+             script.js.
+             ============================================================ -->
+        <div class="area-registros" id="areaRegistrosBanco">
+            <div class="conteudo-registros">
+                <div class="barra-busca-registros">
+                    <input type="text" id="inputBuscaRegistros" class="campo-busca-registros" placeholder="Pesquisar por paciente, OM, especialidade ou data..." autocomplete="off">
+                    <button type="button" id="btnAtualizarRegistros" class="btn-registro" title="Relê a pasta do banco no disco">ATUALIZAR</button>
+                </div>
+
+                <div id="listaRegistrosBanco" class="lista-registros"></div>
+
+                <div class="rodape-registros">
+                    <span id="contadorRegistros" class="contador-registros"></span>
+                    <button type="button" id="btnCarregarMaisRegistros" class="btn-registro oculto">CARREGAR MAIS</button>
+                </div>
+            </div>
         </div>
+
     </div>
 </div>
+
+<!-- ============================================================
+     LISTAS DE SUGESTÃO DOS CAMPOS EDITÁVEIS (página BANCO)
+     Ficam vazias no HTML de propósito: são preenchidas pelo MÓDULO 22
+     a partir dos dicionários do MÓDULO 4 do script.js, para que
+     cadastrar uma nova OM/especialidade continue sendo feito em um
+     lugar só. São <datalist>, e não <select>: o usuário escolhe da
+     lista OU digita um valor que ainda não existe nela.
+     ============================================================ -->
+<datalist id="listaMedicosRegistro"></datalist>
+<datalist id="listaEspecialidadesRegistro"></datalist>
+<datalist id="listaOMsRegistro"></datalist>
+<datalist id="listaOMsAbrRegistro"></datalist>
+<datalist id="listaTiposOMRegistro"></datalist>
 
 <!-- ============================================================
      RODAPÉ FIXO
@@ -367,18 +515,22 @@
 <footer id="footerSistema">
     <div class="rodapeEsquerda">
         <div class="info-versao">
-            <div class="versao">Versão 1.4.5</div>
-            <div class="versaodata">Última Atualização 10/08/2026</div>
+            <div class="versao">Versão 1.6.3</div>
+            <div class="versaodata">Última Atualização 20/08/2026</div>
         </div>
     </div>
 
     <div class="rodapeCentro">
-        <button id="toggleAbas" class="toggleAbas" aria-label="Recolher ou expandir menu de páginas">▼</button>
+        <button id="toggleAbas" class="toggleAbas" aria-label="Recolher ou expandir menu de páginas"><span class="icone-toggle-abas">▼</span></button>
+        <!-- ORDEM (v1.6): BANCO vem primeiro porque é a página inicial e o
+             menu do sistema; as demais seguem a ordem real do trabalho
+             (LME -> EXCEL -> DOC). Os atalhos Alt+1..4 acompanham esta
+             ordem — ver MÓDULO 17 do script.js. -->
         <div id="conteudoAbas">
-            <button class="aba ativa" data-aba="lme">LME</button>
-            <button class="aba" data-aba="doc">DOC</button>
+            <button class="aba ativa" data-aba="banco">BANCO</button>
+            <button class="aba" data-aba="lme">LME</button>
             <button class="aba" data-aba="excel">EXCEL</button>
-            <button class="aba" data-aba="banco">BANCO</button>
+            <button class="aba" data-aba="doc">DOC</button>
         </div>
     </div>
 
