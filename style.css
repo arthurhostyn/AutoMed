@@ -13,108 +13,76 @@
     9. Banco de dados local (barra superior e página BANCO)
    10. Mensagens flutuantes (toasts)
    11. Modais padronizados (duplicidade e exclusão)
+   12. Visualizador de registros do banco (página BANCO)
+   13. Página inicial, modo foco e checklist
+   14. Rolagem personalizada
+   15. Adicionar paciente pela página BANCO (v1.6.2)
    ============================================================ */
-
 
 /* ============================================================
    MÓDULO 1 — RESET E CONFIGURAÇÃO BASE
-   O que este arquivo faz: zera os estilos padrão do navegador e
-   define o comportamento visual básico de toda a página (fundo,
-   fonte, zoom geral e o efeito de "não piscar" ao carregar).
    ============================================================ */
-
-/* Mantém sempre a barra de rolagem vertical reservada (mesmo em
-   páginas sem rolagem). Isso evita que o conteúdo "pule" alguns
-   pixels para o lado quando uma página passa a ter rolagem. */
 html {
-    overflow-y: scroll;         /* sempre mostra a faixa de rolagem vertical */
-    scrollbar-gutter: stable;   /* reserva o espaço da barra mesmo sem rolagem */
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
 }
 
-/* Reset universal: remove margens/paddings padrão do navegador e
-   força todos os elementos a usarem a mesma fonte. */
 * {
     margin: 0;
     padding: 0;
-    box-sizing: border-box;                     /* padding/border não aumentam o tamanho final do elemento */
-    font-family: Arial, Helvetica, sans-serif;   /* fonte única em todo o sistema */
+    box-sizing: border-box;
+    font-family: Arial, Helvetica, sans-serif;
 }
 
 body {
-    background: #4b5320;   /* verde militar de fundo */
-    color: white;           /* texto branco por padrão */
-    padding: 65px;          /* respiro entre o conteúdo e a borda da janela */
-    zoom: 0.71;              /* reduz a escala geral da página (suportado em Chrome/Edge) */
-    opacity: 0;                       /* começa invisível... */
-    transition: opacity 0.15s ease;   /* ...e aparece suavemente quando o JS libera (ver MÓDULO 16, no final do script.js) */
-    overflow-x: hidden;      /* nunca mostra rolagem horizontal */
+    background: #4b5320;
+    color: white;
+    padding: 65px;
+    zoom: 0.71;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    overflow-x: hidden;
 }
 
-/* Classe adicionada via JavaScript quando a página termina de montar.
-   É o que dispara a transição de opacidade acima (efeito "anti-flicker"). */
 body.carregado {
     opacity: 1;
 }
 
-/* ------------------------------------------------------------
-   NOTA DE REVISÃO (compatibilidade):
-   A propriedade "zoom" não é um padrão CSS oficial e não funciona
-   no Firefox (funciona em Chrome, Edge e navegadores baseados em
-   Chromium). Se o sistema também precisar rodar no Firefox, o
-   substituto correto seria "transform: scale()" em um container
-   dedicado — porém essa troca exige testar novamente o rodapé fixo
-   (position: fixed se comporta diferente dentro de um elemento com
-   transform). Por segurança, a técnica atual foi mantida como está.
-   ------------------------------------------------------------ */
 /* ============================================================
    MÓDULO 2 — CONTAINER PRINCIPAL, MARCA D'ÁGUA E LAYOUT GERAL
-   O que este arquivo faz: centraliza o conteúdo de cada página,
-   desenha o brasão semitransparente de fundo e organiza o layout
-   de duas colunas (painel de dados + área principal) usado na
-   página LME.
    ============================================================ */
-
 .container {
-    max-width: 1100px;     /* largura máxima do conteúdo, mesmo em telas grandes */
-    margin: auto;            /* centraliza horizontalmente */
-    margin-top: -50px;      /* ajuste fino para compensar o padding do body */
-    position: relative;      /* cria contexto de posicionamento para o brasão (::before) */
-    z-index: 2;               /* garante que o conteúdo fique acima da marca d'água */
+    max-width: 1100px;
+    margin: auto;
+    margin-top: -50px;
+    position: relative;
+    z-index: 2;
 }
 
-/* Pseudo-elemento usado como "papel de parede" do brasão dentro do
-   container. Fica atrás de tudo (z-index -1) e não recebe cliques. */
 .container::before {
     content: "";
     position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;   /* ocupa o container inteiro */
-
+    top: 0; left: 0; right: 0; bottom: 0;
     background-image: url("Imagens Dentro do Lodout/Brasão.png");
     background-repeat: no-repeat;
     background-position: center -20px;
     background-size: 620px;
-    opacity: 0.25;            /* efeito de marca d'água (bem apagado) */
-
-    pointer-events: none;    /* clique "atravessa" o brasão, não atrapalha os botões */
+    opacity: 0.25;
+    pointer-events: none;
     z-index: -1;
 }
 
-/* Layout principal da página LME: painel lateral esquerdo (dados
-   extraídos) + área principal (modelo de texto e resultado). */
 .conteudo-principal {
     display: flex;
-    gap: 20px;                 /* espaço entre as duas colunas */
-    align-items: flex-start;   /* cada coluna cresce independente da altura da outra */
+    gap: 20px;
+    align-items: flex-start;
 }
 
-/* Coluna esquerda: painel fixo de largura definida com os cards
-   "Dados Extraídos". */
 .painel-extraidos {
     width: 300px;
-    position: sticky;   /* acompanha a rolagem da página */
+    position: sticky;
 }
 
-/* Coluna direita: ocupa todo o espaço restante. */
 .area-principal {
     flex: 1;
 }
@@ -122,10 +90,6 @@ body.carregado {
 .bloco {
     margin-top: 0px;
 }
-
-/* ============================================================
-   IMAGENS DECORATIVAS DOS PAINÉIS (fundo dos cards e da página DOC)
-   ============================================================ */
 
 .imagemPainel {
     width: 222px;
@@ -138,7 +102,7 @@ body.carregado {
     background-position: center;
     background-size: contain;
     opacity: 0.85;
-    pointer-events: none;   /* decorativo: não deve interceptar cliques */
+    pointer-events: none;
 }
 
 .imagemPainelDoc {
@@ -147,18 +111,16 @@ body.carregado {
     top: 0; left: 0; right: 0; bottom: 0;
     background-image: url("Imagens Dentro do Lodout/CFC25.png");
     background-repeat: no-repeat;
-    background-position: center 535px;   /* posição calibrada manualmente, não alterar */
+    background-position: center 535px;
     background-size: 600px;
     opacity: 0.65;
     pointer-events: none;
-    z-index: 1;   /* acima do fundo verde, porém abaixo dos botões da página */
+    z-index: 1;
 }
+
 /* ============================================================
    MÓDULO 3 — CABEÇALHO (títulos, versão e assinatura)
-   O que este arquivo faz: estiliza os títulos de cada página e a
-   faixa superior com a versão do sistema e a assinatura do autor.
    ============================================================ */
-
 h1 {
     text-align: center;
     margin-bottom: 20px;
@@ -179,7 +141,6 @@ h3 {
     font-size: 35px;
 }
 
-/* Linha com a versão (esquerda) e a assinatura (direita), acima do título. */
 .cabecalho {
     display: flex;
     justify-content: space-between;
@@ -230,34 +191,19 @@ h3 {
     font-style: italic;
     color: #c7d59f;
 }
-/* ============================================================
-   MÓDULO 4 — DROPZONES (áreas de arrastar/soltar PDF) E RECOLHER
-   O que este arquivo faz: estiliza as caixas de anexar PDF, a barra
-   que permite recolher/expandir esse bloco, e o estado "hover"
-   quando um arquivo é arrastado por cima.
-   ============================================================ */
 
+/* ============================================================
+   MÓDULO 4 — DROPZONES E RECOLHER
+   ============================================================ */
 .area-dropzones {
     margin-bottom: 20px;
     transition: margin-bottom 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* ------------------------------------------------------------
-   LINHA DA BARRA: duas caixas INDEPENDENTES lado a lado — a barra
-   "ANEXAR PDF'S" (larga) e o botão "LIMPAR" (estreito), separadas por
-   um vão real onde aparece o fundo da página.
-
-   É o mesmo padrão que o sistema já usa para botões independentes em
-   sequência (".botoesDoc", "#conteudoAbas/.aba" e o par EXCLUIR/SALVAR
-   da barra do banco): caixas preenchidas, sem borda, separadas por um
-   vão — a separação vem do vão, não de uma borda desenhada.
-
-   Esta linha tem SEMPRE a largura total do container: é ela que serve
-   de régua fixa para centralizar o rótulo (ver .label-dropzone). ---- */
 .linha-barra-dropzone {
     display: flex;
-    align-items: stretch;   /* iguala a altura das duas caixas automaticamente */
-    position: relative;      /* régua fixa do rótulo centralizado, abaixo */
+    align-items: stretch;
+    position: relative;
     margin-bottom: 10px;
     transition: margin-bottom 0.35s ease;
 }
@@ -266,22 +212,13 @@ h3 {
     margin-bottom: 0px;
 }
 
-/* Barra clicável com o rótulo "ANEXAR PDF'S" e a seta de recolher.
-
-   REVISÃO: a versão original usava "padding: 8px 481px" para
-   empurrar o texto e o botão para o centro da barra. Esse valor é
-   um número "mágico" calculado para a largura exata de 1100px do
-   container — em qualquer largura diferente ele quebra o alinhamento
-   ou estoura a barra. Trocado por posicionamento independente: o
-   rótulo se centraliza sozinho e a seta fica presa à direita com
-   "margin-left:auto" — nenhum dos dois depende de medir a tela. */
 .barra-dropzone-header {
-    flex: 1;   /* ocupa tudo o que sobra — cresce quando o LIMPAR encolhe */
+    flex: 1;
     display: flex;
     align-items: center;
     background: #283618;
     color: white;
-    padding: 8px 15px;          /* antes: 8px 481px (hack de centralização) */
+    padding: 8px 15px;
     border: none;
     border-radius: 0;
     font-size: 14px;
@@ -295,23 +232,15 @@ h3 {
     background: #1d2911;
 }
 
-/* Rótulo "ANEXAR PDF'S": NUNCA se move. Ele se ancora na linha inteira
-   (".linha-barra-dropzone", de largura fixa), e não na barra — que muda
-   de largura ao recolher. Assim ele fica no mesmo ponto nos dois
-   estados, alinhado com o título da página e com o campo "Pesquisar
-   Paciente…", que também se centralizam nessa mesma largura. */
 .label-dropzone {
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
-    pointer-events: none;   /* decorativo — quem recebe o clique é a própria barra */
+    pointer-events: none;
 }
 
-/* Seta de recolher/expandir: botão simples preso à direita da barra.
-   Fundo transparente (a barra por trás já é #283618) e escurece no
-   hover, seguindo o padrão dos demais botões do sistema. */
 .toggleDropzone {
-    margin: 0 0 0 auto;   /* "auto" à esquerda = colado na borda direita da barra */
+    margin: 0 0 0 auto;
     padding: 0;
     width: 32px;
     height: 30px;
@@ -327,33 +256,35 @@ h3 {
     transition: background-color 0.2s ease;
 }
 
-/* REVISÃO (bug): o giro de 180° já esteve aplicado no BOTÃO inteiro.
-   Como o botão pode variar de tamanho, girar a caixa inteira fazia o
-   giro "varrer" a vizinhança, parecendo que outros elementos giravam
-   junto. A seta é um elemento próprio, do tamanho do ícone, e só ELA
-   gira — a caixa por trás permanece parada. */
 .icone-toggle-dropzone {
     display: inline-block;
-    font-size: 14px;
+    width: 16px;
+    height: 16px;
+    font-size: 0;
+    position: relative;
     transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.27);
     transform: rotate(0deg);
+}
+
+.icone-toggle-dropzone::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid currentColor;
 }
 
 .area-dropzones.recolhido .icone-toggle-dropzone {
     transform: rotate(-180deg);
 }
 
-/* Botão "LIMPAR": caixa própria, irmã da barra — mesmo preenchimento e
-   mesmo hover dos outros botões do sistema (SALVAR, EXCLUIR, abas).
-
-   O recuo entre as duas caixas é um "margin-left" no LIMPAR, e não um
-   "gap" na linha: o gap continuaria reservando espaço mesmo com o
-   LIMPAR em largura 0, impedindo a barra de encostar na borda direita
-   quando recolhida. */
 .btn-limpar-dropzone {
     flex: 0 0 auto;
     width: 110px;
-    margin: 0 0 0 10px;   /* o recuo visível entre as duas caixas */
+    margin: 0 0 0 10px;
     padding: 0;
     border: none;
     border-radius: 0;
@@ -381,9 +312,6 @@ h3 {
     outline-offset: -2px;
 }
 
-/* Estado recolhido: o LIMPAR encolhe até zero (largura, recuo e
-   opacidade) e a barra — sendo "flex:1" — cresce em tempo real
-   ocupando exatamente o espaço liberado, sem deixar vão sobrando. */
 .area-dropzones.recolhido .btn-limpar-dropzone {
     width: 0;
     margin-left: 0;
@@ -391,7 +319,6 @@ h3 {
     pointer-events: none;
 }
 
-/* Conteúdo recolhível: a altura vai de 250px até 0 suavemente. */
 .conteudo-dropzones {
     max-height: 250px;
     opacity: 1;
@@ -400,29 +327,16 @@ h3 {
                 opacity 0.25s ease-in-out;
 }
 
-/* Remove a margem do último item interno para não duplicar espaçamento. */
 .conteudo-dropzones > div:last-child {
     margin-bottom: 0 !important;
 }
 
-/* Estado "recolhido": zera a altura visível e desliga cliques dentro dele. */
 .area-dropzones.recolhido .conteudo-dropzones {
     max-height: 0 !important;
     opacity: 0 !important;
     pointer-events: none;
 }
 
-/* ------------------------------------------------------------
-   REVISÃO: a folha original repetia a mesma lista de 6 a 8 IDs em
-   três regras diferentes (estilo base, estado ":hover" e o
-   "display:none" dos inputs de arquivo). Isso é frágil: toda nova
-   dropzone precisa lembrar de entrar manualmente nas três listas,
-   senão fica sem estilo. A classe ".dropZoneDoc" já existia no HTML
-   em 6 das 8 dropzones mas não tinha nenhuma regra CSS associada
-   (ou seja, estava "morta"). Agora ela é a única fonte de estilo:
-   toda dropzone recebe essa classe no HTML e este bloco cuida de
-   todas de uma vez.
-   ------------------------------------------------------------ */
 .dropZoneDoc {
     border: 3px dashed #c7d59f;
     padding: 10px;
@@ -439,32 +353,23 @@ h3 {
     background: #606c3870;
 }
 
-/* Anel de foco visível para quem navega só com o teclado (Tab / Enter),
-   já que agora as dropzones são focáveis — ver comentário no JS
-   (MÓDULO 9 do script.js) sobre acessibilidade por teclado. */
 .dropZoneDoc:focus-visible {
     outline: 3px solid #ffffff;
     outline-offset: -3px;
 }
 
-/* Variante maior, usada apenas na dropzone da Comissão de Ética. */
 #dropZoneComissaoEtica {
     padding: 70.5px;
     font-size: 28px;
 }
 
-/* Todo input de arquivo do sistema é usado apenas como "gatilho"
-   escondido atrás de uma dropzone — por isso um único seletor por
-   atributo substitui a lista de 8 IDs que existia antes. */
 input[type="file"] {
     display: none;
 }
+
 /* ============================================================
    MÓDULO 5 — CARDS DE DADOS EXTRAÍDOS
-   O que este arquivo faz: estiliza os pequenos cartões que mostram
-   os dados lidos do PDF (Paciente, Médico, Data, etc.).
    ============================================================ */
-
 .dados-extraidos {
     display: flex;
     flex-direction: column;
@@ -474,8 +379,8 @@ input[type="file"] {
 .item-dado {
     background: #f5f5f5;
     color: black;
-    border: 2px solid #2f3e1d;
-    border-radius: 6px;
+    border: 8px solid #2f3e1d;
+    border-radius: 0px;
     padding: 12px;
 }
 
@@ -494,7 +399,6 @@ input[type="file"] {
     margin-top: 20px;
 }
 
-/* Variante em linha, usada na página "Renomeador de Documentos". */
 .dados-extraidos-horizontal {
     display: flex;
     flex-direction: row !important;
@@ -506,29 +410,26 @@ input[type="file"] {
     flex: 1;
     min-width: 244px;
 }
-/* ============================================================
-   MÓDULO 6 — CAMPOS DE TEXTO E CONTROLES (textarea, botão, select)
-   O que este arquivo faz: estiliza os campos editáveis de modelo de
-   texto, os botões/selects padrão do sistema e os campos de
-   resultado (nome de arquivo gerado, linha do Excel).
-   ============================================================ */
 
+/* ============================================================
+   MÓDULO 6 — CAMPOS DE TEXTO E CONTROLES
+   ============================================================ */
 .modeloTexto {
-    display: none;   /* só o modelo escolhido no select fica visível (ver MÓDULO 11 do script.js) */
+    display: none;
 }
 
 textarea,
 .area-editable {
     width: 100%;
-    height: 280px;        /* altura fixa, igual para todos os modelos */
+    height: 280px;
     min-height: 280px;
     max-height: 280px;
     background: #f5f5f5;
     color: black;
     border: 10px solid #2f3e1d;
     padding: 12px;
-    resize: none;          /* sem alça de redimensionar no canto */
-    overflow-y: auto;      /* texto muito longo ganha barra de rolagem interna */
+    resize: none;
+    overflow-y: auto;
     white-space: pre-wrap;
     word-wrap: break-word;
     font-family: Arial, Helvetica, sans-serif;
@@ -599,8 +500,6 @@ select:hover {
     margin-top: 15px;
 }
 
-/* Página Excel: força altura mínima do container para o brasão
-   aparecer inteiro e reserva espaço para não encostar no rodapé. */
 #pagina-excel .container {
     min-height: 700px !important;
     padding-bottom: 120px !important;
@@ -618,17 +517,13 @@ select:hover {
     margin-top: 15px;
 }
 
-/* ============================================================
-   SELECT "CONFERÊNCIA / LAUDO" — aparece e desaparece com uma
-   transição de esmaecimento, igual ao botão do rodapé.
-   ============================================================ */
 #tipoLaudoConferenciaSelect {
     display: inline-block;
     vertical-align: middle;
     opacity: 1;
     visibility: visible;
     transform: translateY(0) scale(1);
-    transform-origin: left center;   /* a animação nasce a partir da esquerda */
+    transform-origin: left center;
     max-width: 220px;
     overflow: hidden;
     pointer-events: auto;
@@ -651,30 +546,25 @@ select:hover {
     border-width: 0;
     pointer-events: none;
 }
-/* ============================================================
-   MÓDULO 7 — SISTEMA DE ABAS/PÁGINAS E TRANSIÇÕES ENTRE ELAS
-   O que este arquivo faz: controla qual "página" (LME, DOC, EXCEL,
-   BANCO) fica visível e a animação de deslizar ao trocar de aba.
-   ============================================================ */
 
+/* ============================================================
+   MÓDULO 7 — SISTEMA DE ABAS/PÁGINAS E TRANSIÇÕES
+   ============================================================ */
 .pagina {
-    display: none;         /* toda página começa escondida... */
-    position: relative;    /* ...e prende elementos absolutos (ex.: brasão da DOC) dentro dela */
+    display: none;
+    position: relative;
 }
 
 .pagina.ativa {
-    display: block;        /* ...até o JS marcar a página atual como ativa */
+    display: block;
 }
 
 #pagina-doc {
     position: relative;
-    min-height: 1100px !important;      /* expande a página para mostrar o brasão inteiro */
-    padding-bottom: 460px !important;   /* garante espaço para a base do brasão */
+    min-height: 1100px !important;
+    padding-bottom: 460px !important;
 }
 
-/* Na página DOC o painel de cards precisa ocupar a largura toda
-   (sem isso os cards ficam espremidos/cortados, pois herdariam a
-   largura fixa de 300px usada na página LME). */
 #pagina-doc .painel-extraidos {
     width: 100% !important;
     position: static !important;
@@ -691,8 +581,6 @@ select:hover {
     display: none !important;
 }
 
-/* Some suavemente ao trocar entre os modos "LME SCAN" e "COMISSÃO
-   DE ÉTICA" dentro da página DOC. */
 #blocoLmeScan:not(.oculto),
 #blocoComissaoEtica:not(.oculto),
 #painelExtraidosLmeScan:not(.oculto),
@@ -706,8 +594,6 @@ select:hover {
     to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Anima a página que entra: da direita quando avança, da esquerda
-   quando volta (classes aplicadas dinamicamente pelo JS de navegação). */
 .pagina.slide-direita {
     animation: slideDaDireita 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
@@ -725,12 +611,10 @@ select:hover {
     from { opacity: 0; transform: translateX(-45px); }
     to   { opacity: 1; transform: translateX(0); }
 }
-/* ============================================================
-   MÓDULO 8 — RODAPÉ FIXO (menu de navegação entre páginas)
-   O que este arquivo faz: fixa o rodapé na base da tela e controla
-   a animação de recolher/expandir o menu de abas.
-   ============================================================ */
 
+/* ============================================================
+   MÓDULO 8 — RODAPÉ FIXO
+   ============================================================ */
 footer {
     position: fixed;
     bottom: 0;
@@ -743,8 +627,6 @@ footer {
     z-index: 1000;
 }
 
-/* Fundo do rodapé, separado em ::after para poder deslizar sozinho
-   quando o rodapé é recolhido. */
 footer::after {
     content: "";
     position: absolute;
@@ -792,11 +674,39 @@ footer::after {
     border-radius: 0px;
     z-index: 10;
     position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
                 opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1),
                 background-color 0.2s ease;
-    transform: translateY(0) rotate(0deg) scale(1);
+    transform: translateY(0);
     opacity: 1;
+}
+
+.icone-toggle-abas {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    font-size: 0;
+    position: relative;
+    transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.27);
+    transform: rotate(0deg);
+}
+
+.icone-toggle-abas::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid currentColor;
+}
+
+footer.recolhido .icone-toggle-abas {
+    transform: rotate(-180deg);
 }
 
 footer.recolhido #toggleAbas.toggleAbas:hover {
@@ -811,10 +721,12 @@ footer.recolhido #toggleAbas.toggleAbas:hover {
 #conteudoAbas .aba {
     background: #283618;
     color: white;
-    padding: 12px 25px;
+    width: 110px;
+    padding: 12px 0;
     border: none;
     cursor: pointer;
     font-weight: bold;
+    text-align: center;
 }
 
 #conteudoAbas .aba:hover {
@@ -826,8 +738,6 @@ footer.recolhido #toggleAbas.toggleAbas:hover {
     color: #283618;
 }
 
-/* Estado recolhido: fundo, esquerda, direita e abas descem exatamente
-   os mesmos 120px, todos juntos. */
 footer.recolhido::after,
 footer.recolhido .rodapeEsquerda,
 footer.recolhido .rodapeDireita,
@@ -843,8 +753,6 @@ footer.recolhido #conteudoAbas {
     pointer-events: none;
 }
 
-/* Área "fantasma" que continua recebendo clique/hover perto da borda
-   inferior, para o rodapé reaparecer ao passar o mouse ali. */
 footer.recolhido::before {
     content: "";
     position: absolute;
@@ -858,7 +766,7 @@ footer.recolhido::before {
 
 footer.recolhido #toggleAbas {
     opacity: 0;
-    transform: translateY(18px) rotate(-180deg) scale(0.9);
+    transform: translateY(18px);
     background: #283618;
     pointer-events: auto;
 }
@@ -866,23 +774,12 @@ footer.recolhido #toggleAbas {
 footer.recolhido:hover #toggleAbas,
 footer.recolhido #toggleAbas:hover {
     opacity: 1;
-    transform: translateY(0) rotate(-180deg) scale(1);
+    transform: translateY(0);
 }
+
 /* ============================================================
    MÓDULO 9 — BANCO DE DADOS LOCAL (barra superior e página BANCO)
-   O que este arquivo faz: estiliza a barra de busca/salvar/excluir
-   paciente (topo das páginas LME, EXCEL e DOC) e a página de
-   conexão com a pasta do banco de dados.
-
-   REVISÃO: no arquivo original existiam três classes diferentes
-   (".btn-conexao", ".btn-banco-topo", ".btn-salvar-topo") com
-   exatamente as mesmas 9 propriedades repetidas — e ".btn-conexao"
-   nunca chegou a ser usada em nenhum HTML nem JS (código morto).
-   Aqui elas viram uma única regra. O HTML foi simplificado para usar
-   somente "btn-banco-topo" nesses botões; o resultado visual é
-   idêntico ao original.
    ============================================================ */
-
 .barra-banco-superior {
     border: 3px dashed #c7d59f;
     padding: 10px 15px;
@@ -943,7 +840,6 @@ footer.recolhido #toggleAbas:hover {
     max-width: 1020px;
 }
 
-/* Botões de ação da barra superior (Conectar / Salvar / Excluir). */
 .btn-banco-topo {
     margin-top: 1px;
     margin-bottom: 1px;
@@ -961,10 +857,10 @@ footer.recolhido #toggleAbas:hover {
     background: #1d2911;
 }
 
-/* PÁGINA "GERENCIADOR DO BANCO DE DADOS" */
 #pagina-banco .container {
     display: block;
     text-align: center;
+    min-height: 600px;
 }
 
 .conteudo-central-banco {
@@ -977,57 +873,9 @@ footer.recolhido #toggleAbas:hover {
     width: 100%;
 }
 
-.cartao-conexao {
-    border: 3px dashed #c7d59f;
-    background: #353d1a99;
-    padding: 50px;
-    width: 100%;
-    max-width: 650px;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    margin: 0 auto;
-}
-
-.status-banco-grande {
-    display: inline-block;
-    font-size: 22px;
-    font-weight: bold;
-    color: #ff4d4d;
-    background: rgba(0, 0, 0, 0.3);
-    padding: 15px 30px;
-    margin-bottom: 40px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.btn-conectar-central {
-    background: #283618;
-    color: white;
-    padding: 22px 45px;
-    font-size: 18px;
-    font-weight: bold;
-    border: none;
-    cursor: pointer;
-}
-
-.info-banco {
-    margin-top: 30px;
-    width: 100%;
-    max-width: 650px;
-    padding: 20px;
-    background: rgba(199, 213, 159, 0.1);
-    border-left: 4px solid #c7d59f;
-    text-align: left;
-    margin-left: auto;
-    margin-right: auto;
-}
 /* ============================================================
    MÓDULO 10 — MENSAGENS FLUTUANTES (TOASTS)
-   O que este arquivo faz: estiliza as notificações que aparecem no
-   canto superior direito (sucesso, erro, aviso).
    ============================================================ */
-
 #toastContainer {
     position: fixed;
     top: 25px;
@@ -1036,7 +884,7 @@ footer.recolhido #toggleAbas:hover {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    pointer-events: none;   /* não bloqueia cliques na página por baixo */
+    pointer-events: none;
 }
 
 .toast {
@@ -1085,19 +933,33 @@ footer.recolhido #toggleAbas:hover {
 .toast-icone {
     font-size: 18px;
 }
-/* ============================================================
-   MÓDULO 11 — MODAIS PADRONIZADOS (duplicidade e exclusão)
-   O que este arquivo faz: estiliza as janelas de confirmação usadas
-   pelo Banco de Dados local (paciente duplicado / excluir registro).
-   ============================================================ */
 
+.toast-fechar {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: inherit;
+    font-size: 18px;
+    line-height: 1;
+    padding: 0 2px;
+    cursor: pointer;
+    opacity: 0.7;
+}
+
+.toast-fechar:hover {
+    opacity: 1;
+}
+
+/* ============================================================
+   MÓDULO 11 — MODAIS PADRONIZADOS
+   ============================================================ */
 .modal-overlay {
     position: fixed;
     top: 0; left: 0;
     width: 100%;
     height: 100%;
     background: transparent !important;
-    backdrop-filter: blur(6px) !important;   /* desfoca o fundo sem escurecer de preto */
+    backdrop-filter: blur(6px) !important;
     z-index: 999999 !important;
     pointer-events: auto;
 }
@@ -1221,26 +1083,885 @@ footer.recolhido #toggleAbas:hover {
     background: #1d2911;
 }
 
+/* ============================================================
+   MÓDULO 12 — VISUALIZADOR DE REGISTROS DO BANCO (PÁGINA BANCO)
+   ============================================================ */
+.area-registros {
+    text-align: left;
+    margin-bottom: 20px;
+}
+
+.barra-busca-registros {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.campo-busca-registros {
+    flex: 1;
+    height: 45px;
+    padding: 0 15px;
+    border: 10px solid #2f3e1d;
+    border-radius: 0;
+    background: white;
+    color: black;
+    font-family: Arial, Helvetica, sans-serif;
+    font-weight: bold;
+    font-size: 14px;
+    outline: none;
+}
+
+.campo-busca-registros::placeholder {
+    color: #6b6b6b;
+    font-weight: normal;
+}
+
+.btn-registro {
+    margin: 0;
+    padding: 0 18px;
+    height: 45px;
+    border: none;
+    border-radius: 0;
+    background: #283618;
+    color: white;
+    font-weight: bold;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.2s ease, opacity 0.2s ease;
+}
+
+.btn-registro:hover {
+    background: #1d2911;
+}
+
+.btn-registro:disabled {
+    opacity: 0.45;
+    cursor: default;
+    background: #283618;
+}
+
+.btn-registro:focus-visible {
+    outline: 2px solid #ffffff;
+    outline-offset: -2px;
+}
+
+.btn-registro-perigo {
+    background: #7a1f1f;
+}
+
+.btn-registro-perigo:hover {
+    background: #5e1717;
+}
+
+.lista-registros {
+    height: auto;
+    min-height: auto;
+    max-height: none;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    border: 3px dashed #c7d59f;
+    padding: 10px;
+    background: #353d1a55;
+    box-sizing: border-box;
+}
+
+.lista-registros.conectado {
+    --altura-lista: 645px;
+    height: var(--altura-lista);
+    min-height: var(--altura-lista);
+    max-height: var(--altura-lista);
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lista-registros.conectado {
+        transition: none;
+    }
+}
+
+.lista-registros-vazia {
+    padding: 25px 10px;
+    text-align: center;
+    color: #e8ecd8;
+    font-size: 14px;
+}
+
+.registro-item {
+    margin-bottom: 8px;
+    transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.registro-item:last-child {
+    margin-bottom: 0;
+}
+
+.registro-cabecalho {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    margin: 0;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 0;
+    background: #283618;
+    color: white;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 13px;
+    font-weight: bold;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.registro-cabecalho:hover {
+    background: #1d2911;
+}
+
+.registro-cabecalho:focus-visible {
+    outline: 2px solid #ffffff;
+    outline-offset: -2px;
+}
+
+.registro-item.aberto > .registro-cabecalho {
+    background: #1d2911;
+}
+
+.registro-col {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.registro-col-paciente {
+    flex: 2 1 0;
+}
+
+.registro-col-secundaria {
+    flex: 1 1 0;
+    font-weight: normal;
+    color: #dce3c6;
+}
+
+.registro-seta {
+    flex: 0 0 auto;
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    font-size: 0;
+    position: relative;
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.27);
+}
+
+.registro-seta::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid currentColor;
+}
+
+.registro-item.aberto .registro-seta {
+    transform: rotate(-180deg);
+}
+
+.registro-corpo {
+    border: 3px solid #283618;
+    border-top: none;
+    padding: 10px 12px;
+    background: #353d1a99;
+}
 
 /* ============================================================
-   FUNCIONALIDADE NOVA — BOTÃO DE FECHAR MANUAL NO TOAST
-   Um "×" discreto no canto do toast, para quem quiser dispensar o
-   aviso antes dos 3.5s automáticos (ver função mostrarToast, MÓDULO 1
-   do script.js).
+   ANIMAÇÃO DE ABRIR/FECHAR SANFONA
    ============================================================ */
-.toast-fechar {
-    margin-left: auto;      /* empurra o botão para a direita do toast */
-    background: transparent;
+.sanfona-animando {
+    overflow: hidden !important;
+    transition: max-height 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 0.22s ease,
+                padding-top 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+                padding-bottom 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+                border-bottom-width 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.sanfona-fechada {
+    max-height: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    border-bottom-width: 0 !important;
+    opacity: 0 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sanfona-animando {
+        transition: none !important;
+    }
+}
+
+.registro-subtitulo {
+    font-size: 12px;
+    font-weight: bold;
+    color: #c7d59f;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+
+.registro-campos {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.campo-registro {
+    background: #f5f5f5;
+    border: 2px solid #2f3e1d;
+    border-radius: 6px;
+    padding: 6px 10px;
+}
+
+.campo-registro label {
+    display: block;
+    font-size: 11px;
+    font-weight: bold;
+    color: #283618;
+    margin-bottom: 3px;
+}
+
+.campo-registro input {
+    width: 100%;
     border: none;
-    color: inherit;
-    font-size: 18px;
-    line-height: 1;
-    padding: 0 2px;
+    border-bottom: 1px solid #b9c4a1;
+    border-radius: 0;
+    background: transparent;
+    color: black;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 13px;
+    padding: 2px 0;
+    outline: none;
+}
+
+.campo-registro input:focus {
+    border-bottom: 1px solid #283618;
+}
+
+.campo-registro-largo {
+    grid-column: span 2;
+}
+
+.registro-arquivos {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.arquivo-registro {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #f5f5f5;
+    border: 2px solid #2f3e1d;
+    border-radius: 6px;
+    padding: 7px 10px;
+}
+
+.arquivo-registro-nome {
+    flex: 1;
+    color: black;
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.arquivo-registro-aviso {
+    color: #283618;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.btn-arquivo-registro {
+    margin: 0;
+    padding: 6px 14px;
+    height: auto;
+    font-size: 12px;
+}
+
+.linha-anexo-registro {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.dropzone-registro {
+    flex: 1;
+    margin-bottom: 0;
+    padding: 8px;
+    font-size: 14px;
+}
+
+.select-nome-anexo {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 0 12px;
+    height: auto;
+    border: none;
+    border-radius: 0;
+    background: #283618;
+    color: white;
+    font-weight: bold;
+    font-size: 12px;
     cursor: pointer;
-    opacity: 0.7;
 }
 
-.toast-fechar:hover {
+.select-nome-anexo:hover {
+    background: #1d2911;
+}
+
+.registro-acoes {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    border-top: 1px solid rgba(199, 213, 159, 0.35);
+    padding-top: 10px;
+}
+
+.registro-acoes .select-usar-registro {
+    margin: 0;
+    padding: 0 10px;
+    height: 36px;
+    border: none;
+    border-radius: 0;
+    background: #283618;
+    color: white;
+    font-weight: bold;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.registro-acoes .select-usar-registro:hover {
+    background: #1d2911;
+}
+
+.registro-acoes .btn-usar-registro {
+    height: 36px;
+    padding: 0 16px;
+    font-size: 12px;
+}
+
+.registro-acoes .btn-registro-perigo {
+    margin-left: auto;
+}
+
+.rodape-registros {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.contador-registros {
+    color: #e8ecd8;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+@media (max-width: 900px) {
+    .registro-campos {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    .registro-campos {
+        grid-template-columns: 1fr;
+    }
+
+    .campo-registro-largo {
+        grid-column: span 1;
+    }
+}
+
+/* ============================================================
+   MÓDULO 13 — PÁGINA INICIAL, MODO FOCO E CHECKLIST (v1.6)
+   ============================================================ */
+.painel-inicial {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 10px;
+    text-align: left;
+}
+
+.cartao-status {
+    flex: 1;
+    background: #f5f5f5;
+    color: black;
+    border: 8px solid #2f3e1d;
+    border-radius: 0px;
+    padding: 10px 12px;
+    min-width: 0;
+}
+
+.cartao-status .titulo {
+    font-weight: bold;
+    font-size: 12px;
+    color: #283618;
+}
+
+.cartao-status .valor {
+    font-size: 18px;
+    font-weight: bold;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#cartaoStatusConexao .valor {
+    color: #97322f;
+    transition: color 0.35s ease;
+}
+
+#cartaoStatusConexao.conectado .valor {
+    color: #244124;
+}
+
+.cartao-status-acao {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: stretch;
+    max-width: 320px;
     opacity: 1;
+    overflow: hidden;
+    transition: max-width 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 0.35s ease,
+                margin-left 0.55s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.cartao-status-acao.recolhido {
+    max-width: 0;
+    opacity: 0;
+    margin-left: -10px;
+    pointer-events: none;
+}
+
+.btn-conectar-topo {
+    margin: 0;
+    padding: 0 22px;
+    border: none;
+    border-radius: 0;
+    background: #283618;
+    color: white;
+    font-weight: bold;
+    font-size: 13px;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.btn-conectar-topo:hover {
+    background: #1d2911;
+}
+
+.btn-toggle-backup {
+    flex: 0 0 auto;
+    width: 44px;
+    margin: 0;
+    padding: 0;
+    border: 2px solid #2f3e1d;
+    border-radius: 0;
+    background: #283618;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease;
+}
+
+.btn-toggle-backup:hover {
+    background: #1d2911;
+}
+
+.btn-toggle-backup .icone-toggle-dropzone {
+    transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.27);
+}
+
+.btn-toggle-backup.aberto .icone-toggle-dropzone {
+    transform: rotate(-180deg);
+}
+
+/* Transição suave e direta sem flicker para o backup do banco */
+.area-backup-banco {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 0;
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transition: max-height 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 0.22s ease,
+                margin-bottom 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.area-backup-banco.aberto {
+    max-height: 60px;
+    opacity: 1;
+    margin-bottom: 10px;
+    pointer-events: auto;
+}
+
+.area-backup-banco .btn-registro {
+    flex: 0 0 auto;
+}
+
+.registro-col-progresso {
+    flex: 0 0 auto;
+    min-width: 50px;
+    text-align: center;
+    padding: 1px 7px;
+    border-radius: 0;
+    border: 1px solid rgba(0, 0, 0, 0.3);
+    font-size: 12px;
+    font-weight: bold;
+    background: #d9d9d9;
+    color: #000;
+    transition: background-color 0.25s ease;
+}
+
+.registro-col-progresso.pendente {
+    background: #de6b68;
+}
+
+.registro-col-progresso.andamento {
+    background: #f8dfae;
+}
+
+.registro-col-progresso.completo {
+    background: #c3e6c3;
+}
+
+.registro-checklist {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.item-checklist {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #f5f5f5;
+    border: 2px solid #2f3e1d;
+    border-radius: 4px;
+    padding: 5px 10px;
+    cursor: pointer;
+    user-select: none;
+    overflow: hidden;
+    white-space: nowrap;
+    max-width: 320px;
+    opacity: 1;
+    transform: scale(1);
+    transform-origin: left center;
+    transition: background-color 0.2s ease,
+                border-color 0.2s ease,
+                max-width 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 0.28s ease,
+                transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+                padding 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+                margin 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+                border-width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ------------------------------------------------------------------
+   ETAPA AINDA TRANCADA (v1.6.2)
+   Só as confirmações de DIEx usam isto: a de AGENDAMENTO libera a de
+   REMESSA PARA OM, que por sua vez libera a de ENVIO PARA S2. As
+   etapas de EXCEL e DOC continuam sempre à mostra.
+   Encolhe em vez de sumir (display:none) para que a entrada e a saída
+   possam ser animadas; o margin-right negativo cancela o gap de 8px do
+   .registro-checklist, senão sobraria um buraco onde estava a etiqueta.
+   ------------------------------------------------------------------ */
+.item-checklist.etapa-trancada {
+    max-width: 0;
+    padding-left: 0;
+    padding-right: 0;
+    border-left-width: 0;
+    border-right-width: 0;
+    margin-right: -8px;
+    opacity: 0;
+    transform: scale(0.92);
+    pointer-events: none;
+}
+
+.item-checklist:hover {
+    background: #e8ecd8;
+}
+
+.item-checklist input[type="checkbox"] {
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    accent-color: #283618;
+    cursor: pointer;
+}
+
+.item-checklist-texto {
+    color: black;
+    font-size: 12px;
+    font-weight: bold;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.item-checklist.feito {
+    background: #dcead0;
+    border-color: #45632c;
+}
+
+.item-checklist.feito .item-checklist-texto {
+    text-decoration: line-through;
+    text-decoration-color: rgba(0, 0, 0, 0.35);
+}
+
+.item-checklist.proximo {
+    border-color: #c7d59f;
+    box-shadow: inset 0 0 0 2px rgba(199, 213, 159, 0.9);
+}
+
+/* ------------------------------------------------------------------
+   MODO FOCO (v1.6.2)
+   Antes as outras linhas simplesmente sumiam (display: none) e voltavam
+   de uma vez, o que deixava a caixa com um vazio verde no meio e
+   escancarava que existe um "modo foco" por trás. Agora elas encolhem e
+   crescem com a mesma sanfona do corpo do paciente: abrir parece
+   afastar as outras linhas, e fechar parece trazê-las de volta.
+   Quem comanda a animação é esconderIrmaosDoFoco / revelarIrmaosDoFoco
+   (MÓDULO 22 do script.js); o CSS aqui só descreve os dois estados.
+   ------------------------------------------------------------------ */
+.lista-registros.modo-foco > .registro-item.aberto {
+    margin-bottom: 0;
+}
+
+.registro-item-animando {
+    overflow: hidden;
+    will-change: max-height, opacity;
+    transition: max-height 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 0.24s ease,
+                transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+                margin-bottom 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.registro-item-colapsado {
+    max-height: 0;
+    margin-bottom: 0;
+    opacity: 0;
+    transform: translateY(-6px);
+    overflow: hidden;
+    pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .registro-item-animando {
+        transition: none !important;
+    }
+
+    .item-checklist {
+        transition: background-color 0.2s ease, border-color 0.2s ease !important;
+    }
+}
+
+.registro-dica-fechar {
+    flex: 0 0 auto;
+    font-size: 11px;
+    font-weight: normal;
+    color: #c7d59f;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.registro-item.aberto .registro-dica-fechar {
+    opacity: 0.9;
+}
+
+.toast-acao {
+    flex: 0 0 auto;
+    margin: 0 0 0 6px;
+    padding: 6px 12px;
+    border: 1px solid currentColor;
+    border-radius: 3px;
+    background: transparent;
+    color: inherit;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.2s ease;
+}
+
+.toast-acao:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* ============================================================
+   MÓDULO 14 — ROLAGEM PERSONALIZADA (100% Quadrada / Padrão Sistema)
+   ============================================================ */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #606c38 #2f3e1d;
+}
+
+*::-webkit-scrollbar,
+.lista-registros::-webkit-scrollbar,
+.registro-corpo::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+*::-webkit-scrollbar-track,
+.lista-registros::-webkit-scrollbar-track,
+.registro-corpo::-webkit-scrollbar-track {
+    background: #2f3e1d;
+    border-radius: 0 !important;
+}
+
+*::-webkit-scrollbar-thumb,
+.lista-registros::-webkit-scrollbar-thumb,
+.registro-corpo::-webkit-scrollbar-thumb {
+    background: #606c38;
+    border: 2px solid #2f3e1d;
+    border-radius: 0 !important;
+}
+
+*::-webkit-scrollbar-thumb:hover,
+.lista-registros::-webkit-scrollbar-thumb:hover,
+.registro-corpo::-webkit-scrollbar-thumb:hover {
+    background: #7d8f52;
+}
+
+*::-webkit-scrollbar-corner,
+.lista-registros::-webkit-scrollbar-corner,
+.registro-corpo::-webkit-scrollbar-corner {
+    background: #2f3e1d;
+}
+
+/* ============================================================
+   MÓDULO 15 — ADICIONAR PACIENTE PELA PÁGINA BANCO (v1.6.2)
+   ------------------------------------------------------------
+   Uma faixa só, do tamanho de um botão: as duas dropzones lado a
+   lado dividem o espaço que sobra, e ADICIONAR / LIMPAR / ▼ ficam
+   encostados à direita. Tudo isso porque a página BANCO precisa
+   caber inteira na tela — o painel de conferência dos dados fica
+   guardado atrás do ▼ e só desce quando for pedido.
+   ============================================================ */
+.area-adicionar-banco {
+    margin-bottom: 10px;
+    text-align: left;
+}
+
+.linha-adicionar-banco {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+}
+
+.dropzone-banco {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0;
+    padding: 6px 10px;
+    font-size: 14px;
+    line-height: 1.15;
+    min-height: 45px;
+}
+
+.dropzone-banco .nomeArquivo {
+    font-size: 12px;
+    font-weight: bold;
+    color: #c7d59f;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.area-adicionar-banco .btn-registro {
+    flex: 0 0 auto;
+}
+
+.btn-adicionar-banco {
+    min-width: 190px;
+}
+
+.area-adicionar-banco .btn-toggle-backup {
+    align-self: stretch;
+    height: auto;
+}
+
+/* Mesmo comportamento (e mesma curva) da área de backup do banco:
+   encolhe até sumir em vez de dar um corte seco com display: none. */
+.area-extraidos-banco {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    margin-top: 0;
+    pointer-events: none;
+    transition: max-height 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 0.24s ease,
+                margin-top 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.area-extraidos-banco.aberto {
+    max-height: 220px;
+    opacity: 1;
+    margin-top: 10px;
+    pointer-events: auto;
+}
+
+.dados-extraidos-banco {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+}
+
+.dados-extraidos-banco .item-dado {
+    padding: 6px 10px;
+    min-width: 0;
+}
+
+.dados-extraidos-banco .valor {
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+    .dados-extraidos-banco {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .area-extraidos-banco.aberto {
+        max-height: 480px;
+    }
+}

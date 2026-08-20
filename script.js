@@ -23,55 +23,29 @@
    19. Estatísticas do banco de dados
    20. Backup do banco de dados (exportar / importar)
    21. Rascunho automático do resultado gerado
-
-   Este arquivo é carregado como um <script> comum (sem
-   type="module") de propósito: assim o sistema continua
-   funcionando ao abrir o AutoMed.html direto do disco (duplo
-   clique), sem precisar de um servidor local — módulos ES são
-   bloqueados pelo navegador nesse cenário.
+   22. Visualizador de registros do banco (página BANCO)
+   23. Adicionar paciente pela página BANCO
    ============================================================ */
 
 /* ============================================================
    MÓDULO 1 — MENSAGENS FLUTUANTES (TOASTS)
-   O que este arquivo faz: mostra pequenas notificações no canto da
-   tela (sucesso, erro ou aviso) que somem sozinhas depois de um
-   tempo. É a primeira coisa carregada porque quase todos os outros
-   módulos chamam "mostrarToast" para avisar o usuário de algo.
    ============================================================ */
-
-/**
- * Mostra uma notificação flutuante (toast) no canto superior direito.
- * @param {string} mensagem - texto a exibir para o usuário.
- * @param {"sucesso"|"erro"|"aviso"} tipo - define cor e ícone do toast.
- */
-function mostrarToast(mensagem, tipo = "aviso") {
-    // Procura o container dos toasts; se ainda não existe, cria um só
-    // (todos os toasts futuros reaproveitam o mesmo container).
+function mostrarToast(mensagem, tipo = "aviso", acao = null) {
     let container = document.getElementById("toastContainer");
     if (!container) {
         container = document.createElement("div");
         container.id = "toastContainer";
-
-        // Atributos de acessibilidade: avisam leitores de tela que o
-        // conteúdo desta região muda sozinho e deve ser anunciado.
         container.setAttribute("role", "status");
         container.setAttribute("aria-live", "polite");
         container.setAttribute("aria-atomic", "true");
-
         document.body.appendChild(container);
     }
 
-    // Escolhe o ícone de acordo com o tipo da mensagem.
     let icone = "ℹ️";
     if (tipo === "sucesso") icone = "✅";
     if (tipo === "erro") icone = "❌";
     if (tipo === "aviso") icone = "⚠️";
 
-    // Monta o toast criando elementos DOM diretamente (em vez de usar
-    // innerHTML com a mensagem interpolada). Isso evita que um texto
-    // com caracteres "<" ou ">" seja interpretado como HTML/script —
-    // mesmo hoje todas as mensagens serem fixas no próprio código,
-    // essa é a forma segura de montar conteúdo dinâmico no DOM.
     const toast = document.createElement("div");
     toast.className = `toast toast-${tipo}`;
 
@@ -81,10 +55,8 @@ function mostrarToast(mensagem, tipo = "aviso") {
 
     const spanTexto = document.createElement("span");
     spanTexto.className = "toast-texto";
-    spanTexto.textContent = mensagem;   // textContent nunca interpreta HTML
+    spanTexto.textContent = mensagem;
 
-    // FUNCIONALIDADE NOVA: botão "×" para o usuário dispensar o toast
-    // manualmente, sem precisar esperar os 3.5s automáticos.
     const btnFechar = document.createElement("button");
     btnFechar.type = "button";
     btnFechar.className = "toast-fechar";
@@ -97,125 +69,91 @@ function mostrarToast(mensagem, tipo = "aviso") {
 
     toast.appendChild(spanIcone);
     toast.appendChild(spanTexto);
+
+    if (acao && acao.texto && typeof acao.aoClicar === "function") {
+        const btnAcao = document.createElement("button");
+        btnAcao.type = "button";
+        btnAcao.className = "toast-acao";
+        btnAcao.textContent = acao.texto;
+        btnAcao.addEventListener("click", () => {
+            acao.aoClicar();
+            toast.classList.remove("visivel");
+            toast.addEventListener("transitionend", () => toast.remove());
+        });
+        toast.appendChild(btnAcao);
+    }
+
     toast.appendChild(btnFechar);
     container.appendChild(toast);
 
-    // Espera o próximo frame de render para então adicionar a classe
-    // "visivel" — é o que dispara a transição de entrada em CSS.
     requestAnimationFrame(() => {
         toast.classList.add("visivel");
     });
 
-    // Depois de 3.5s, inicia a saída e remove o elemento quando a
-    // transição de CSS terminar.
-    setTimeout(() => {
-        toast.classList.remove("visivel");
-        toast.addEventListener("transitionend", () => {
-            toast.remove();
-        });
-    }, 3500);
+    if (!acao) {
+        setTimeout(() => {
+            toast.classList.remove("visivel");
+            toast.addEventListener("transitionend", () => {
+                toast.remove();
+            });
+        }, 3500);
+    }
 }
+
 /* ============================================================
    MÓDULO 2 — ESTADO GLOBAL DA APLICAÇÃO
-   O que este arquivo faz: declara as variáveis que guardam, durante
-   o uso do sistema, o texto extraído de cada PDF e os dados do
-   paciente atualmente carregado. Como o projeto não usa um bundler
-   (é aberto direto pelo navegador, inclusive via arquivo local),
-   todos os arquivos de /js compartilham este mesmo escopo global —
-   por isso essas variáveis são declaradas uma única vez, aqui.
    ============================================================ */
-
-// --- Página LME (gerador de DIEx) ---
-let textoPDF = "";              // texto do PDF de Agendamento
-let textoPDFSolicitacao = "";   // texto do PDF do DIEx de Solicitação
-
-// --- Página DOC (renomeador), modo "LME SCAN" ---
-let textoConsultaDoc = "";      // texto do PDF de Marcação
-let textoSolicitacaoDoc = "";   // texto do PDF de Solicitação
-
-// --- Página DOC (renomeador), modo "COMISSÃO DE ÉTICA" ---
-let textoComissaoEtica = "";    // texto do PDF do parecer da comissão
-
-// Arquivo (objeto File) que efetivamente será baixado com novo nome.
+let textoPDF = "";
+let textoPDFSolicitacao = "";
+let textoConsultaDoc = "";
+let textoSolicitacaoDoc = "";
+let textoComissaoEtica = "";
 let arquivoRenomear = null;
-
-// --- Banco de Dados Local ---
-let arquivoAgendamentoObj = null;      // File original de Agendamento (para salvar no banco)
-let arquivoSolicitacaoObj = null;      // File original de Solicitação (para salvar no banco)
-let dirHandleBanco = null;             // referência à pasta do banco escolhida pelo usuário
-let dadosBancoCarregados = null;       // dados de um paciente já salvo, quando selecionado na busca
-let mapaPacientesBanco = new Map();    // índice "identificador -> dados" de todos os pacientes salvos
-
-// --- Página EXCEL ---
+let arquivoAgendamentoObj = null;
+let arquivoSolicitacaoObj = null;
+let dirHandleBanco = null;
+let dadosBancoCarregados = null;
+let mapaPacientesBanco = new Map();
 let textoPDFExcelAgendamento = "";
 let textoPDFExcelSolicitacao = "";
+
 /* ============================================================
    MÓDULO 3 — REFERÊNCIAS AO DOM
-   O que este arquivo faz: busca, uma única vez, os elementos HTML
-   usados repetidamente pelo restante do sistema, e guarda cada um
-   em uma constante. Evita chamar "document.getElementById" várias
-   vezes para o mesmo elemento espalhado pelo código.
-
-   IMPORTANTE: este arquivo precisa ser carregado depois que o HTML
-   do <body> já existe (por isso todos os <script> ficam no fim do
-   documento) e antes de qualquer outro módulo que use estas
-   constantes no nível principal do arquivo (ex.: MÓDULO 9, mais abaixo).
    ============================================================ */
-
-// --- Página LME: dropzones de Agendamento e Solicitação ---
 const dropZone = document.getElementById("dropZone");
 const pdfFile = document.getElementById("pdfFile");
-
 const dropZoneSolicitacao = document.getElementById("dropZoneSolicitacao");
 const pdfSolicitacao = document.getElementById("pdfSolicitacao");
 
-// --- Página DOC: dropzones do modo "LME SCAN" ---
 const dropZoneDocConsulta = document.getElementById("dropZoneDocConsulta");
 const pdfConsultaDoc = document.getElementById("pdfConsultaDoc");
-
 const dropZoneDocSolicitacao = document.getElementById("dropZoneDocSolicitacao");
 const pdfSolicitacaoDoc = document.getElementById("pdfSolicitacaoDoc");
-
 const dropZoneDocArquivo = document.getElementById("dropZoneDocArquivo");
 const pdfRenomear = document.getElementById("pdfRenomear");
 
-// --- Página DOC: dropzone do modo "COMISSÃO DE ÉTICA" ---
 const dropZoneComissaoEtica = document.getElementById("dropZoneComissaoEtica");
 const pdfComissaoEtica = document.getElementById("pdfComissaoEtica");
 
-// --- Página DOC: alternância entre os dois modos acima ---
 const tipoDocumentoSelect = document.getElementById("tipodocumento");
 const blocoLmeScan = document.getElementById("blocoLmeScan");
 const blocoComissaoEtica = document.getElementById("blocoComissaoEtica");
 const painelExtraidosLmeScan = document.getElementById("painelExtraidosLmeScan");
 const painelExtraidosComissao = document.getElementById("painelExtraidosComissao");
 
-// --- Página LME: escolha do modelo de texto e pronome do paciente ---
 const modeloSelect = document.getElementById("modeloSelect");
 const pronomePaciente = document.getElementById("pronomePaciente");
 
-// --- Página EXCEL: dropzones de Agendamento e Solicitação ---
 const dropZoneExcelAgendamento = document.getElementById("dropZoneExcelAgendamento");
 const pdfExcelAgendamento = document.getElementById("pdfExcelAgendamento");
-
 const dropZoneExcelSolicitacao = document.getElementById("dropZoneExcelSolicitacao");
 const pdfExcelSolicitacao = document.getElementById("pdfExcelSolicitacao");
 
-// --- Página LME: select "Conferência / Laudo", usado só em alguns modelos ---
 const tipoLaudoConferenciaSelect = document.getElementById("tipoLaudoConferenciaSelect");
+
 /* ============================================================
    MÓDULO 4 — BASE DE CONHECIMENTO (dicionários fixos)
-   O que este arquivo faz: guarda as listas e "de-para" usados para
-   traduzir textos crus do PDF em nomes padronizados: médicos
-   conhecidos, postos militares, organizações militares (OM) e suas
-   abreviações, cargos e especialidades médicas.
-
-   Estas tabelas não têm lógica — são apenas dados. Para adicionar um
-   novo médico, OM ou especialidade, basta incluir uma nova linha no
-   dicionário correspondente, sem precisar mexer em nenhuma função.
    ============================================================ */
-
-// "Texto como aparece no PDF" -> "Como deve aparecer no documento gerado".
 const medicosConhecidos = {
     "TENEVERTON": "Ten EVERTON",
     "MAJFRANCISCOBRAGA": "Maj FRANCISCO BRAGA",
@@ -226,7 +164,6 @@ const medicosConhecidos = {
     "CONFTRAUMATOLOGIA": "Conferência Traumatológica"
 };
 
-// Prefixo do posto/graduação (como vem no PDF, maiúsculo) -> abreviação padrão.
 const postosMilitares = {
     "TEN": "Ten",
     "CAP": "Cap",
@@ -238,7 +175,6 @@ const postosMilitares = {
     "SGT": "Sgt"
 };
 
-// Nome completo da Organização Militar -> sigla abreviada usada nos documentos.
 const omsConhecidas = {
     "Comando Militar do Sul": "CMS",
     "Companhia de Comando do Comando Militar do Sul": "Cia C CMS",
@@ -381,22 +317,41 @@ const omsConhecidas = {
     "15ª Companhia de Infantaria Motorizada": "15ª Cia Inf Mtz",
     "16º Esquadrão de Cavalaria Mecanizado": "16º Esqd C Mec",
     "15ª Companhia de Engenharia de Combate Mecanizada": "15ª Cia E Cmb Mec",
-    "15ª Companhia de Comunicações Mecanizada": "15ª Cia Com Mec"
+    "15ª Companhia de Comunicações Mecanizada": "15ª Cia Com Mec",
+    "Colégio Militar de Porto Alegre" : "CMPA",
+    "Escalão de Saúde da 3ª Região Militar" : "Esc Sau/3ªRM",
+    "Posto Médico da Guarnição de Cruz Alta" : "PMGuCA"
 };
 
-// Trecho do cargo (como aparece no PDF) -> categoria usada para decidir
-// pronome ("esse"/"essa") e tratamento ("Comandante"/"Chefe").
+const siglasAlternativasOM = {
+    "H Gu Ba": "HGuB",
+    "HGuBa": "HGuB"
+};
+
 const cargosConhecidos = {
-    "COMANDANTE": "Comando",
+    "CHEFE AO ESCALAO": "Grande Comando",
+    "CHEFE AO ESCALÃO": "Grande Comando",
     "SUBCOMANDANTE": "Comando",
+    "COMANDANTE": "Comando",
+    "SUBDIRETOR": "Direção",
+    "DIRETOR": "Direção",
+    "DIREÇÃO": "Direção",
+    "DIRECAO": "Direção",
     "CHEFE": "Chefia",
-    "Chefe ao Escalão": "Grande Comando",
-    "DIRETOR": "Comando",
-    "SUBDIRETOR": "Comando",
-    "SUBDIRETOR(A)": "Comando"
+    "CHEFIA": "Chefia"
 };
 
-// Lista de especialidades médicas reconhecidas pelo sistema.
+const tratamentoPorTipoOM = {
+    "Comando":        { cargo: "Comandante", pronome: "esse" },
+    "Grande Comando": { cargo: "Comandante", pronome: "esse" },
+    "Chefia":         { cargo: "Chefe",      pronome: "essa" },
+    "Direção":        { cargo: "Diretor",    pronome: "essa" }
+};
+
+function tratamentoDoTipoOM(tipoOM) {
+    return tratamentoPorTipoOM[tipoOM] || tratamentoPorTipoOM["Comando"];
+}
+
 const especialidadesConhecidas = [
     "NEUROCIRURGIA",
     "NEUROLOGIA",
@@ -414,42 +369,114 @@ const especialidadesConhecidas = [
     "CIRURGIA BUCO-MAXILO-FACIAL"
 ];
 
-// Número do mês (com e sem zero à esquerda) -> abreviação em português.
 const mesesAbreviados = {
     "01": "JAN", "02": "FEV", "03": "MAR", "04": "ABR", "05": "MAIO", "06": "JUN",
     "07": "JUL", "08": "AGO", "09": "SET", "10": "OUT", "11": "NOV", "12": "DEZ",
     "1": "JAN", "2": "FEV", "3": "MAR", "4": "ABR", "5": "MAIO", "6": "JUN",
     "7": "JUL", "8": "AGO", "9": "SET"
 };
+
+/* ============================================================
+   MÓDULO 4.1 — DIAGNÓSTICO DA EXTRAÇÃO
+   ============================================================ */
+const DEBUG_EXTRACAO = { ativo: localStorage.getItem("automed_debug") !== "off" };
+const ultimosTextosPDF = { agendamento: "", solicitacao: "", outro: "" };
+let ultimaAssinaturaExtracao = "";
+
+window.AutoMedDebug = {
+    ligar() {
+        DEBUG_EXTRACAO.ativo = true;
+        localStorage.setItem("automed_debug", "on");
+        console.log("%c[AutoMed] Diagnóstico de extração LIGADO.", "color:#0a7;font-weight:bold");
+    },
+    desligar() {
+        DEBUG_EXTRACAO.ativo = false;
+        localStorage.setItem("automed_debug", "off");
+        console.log("%c[AutoMed] Diagnóstico de extração DESLIGADO.", "color:#a70;font-weight:bold");
+    },
+    ultimoTexto(qual = "solicitacao") {
+        return ultimosTextosPDF[qual] || "";
+    }
+};
+
+function criarRastreio(titulo) {
+    const linhas = [];
+    const notas = [];
+
+    return {
+        registrar(campo, bruto, valorFinal, regra = "", correcao = "") {
+            linhas.push({
+                Campo: campo,
+                "Extraído do PDF (bruto)": bruto === undefined || bruto === null || bruto === ""
+                    ? "— (não encontrado)"
+                    : String(bruto),
+                "Valor final": valorFinal === undefined || valorFinal === null || valorFinal === ""
+                    ? "— (vazio)"
+                    : String(valorFinal),
+                "Regra usada": regra,
+                "Correção aplicada": correcao || (String(bruto ?? "") === String(valorFinal ?? "") ? "nenhuma" : "normalização")
+            });
+        },
+        nota(mensagem) {
+            notas.push(mensagem);
+        },
+        imprimir() {
+            if (!DEBUG_EXTRACAO.ativo) return;
+            console.groupCollapsed(`%c🩺 AutoMed — ${titulo}`, "color:#0a7;font-weight:bold");
+            if (typeof console.table === "function") {
+                console.table(linhas);
+            } else {
+                linhas.forEach(l => console.log(l));
+            }
+            if (notas.length) {
+                console.groupCollapsed("%c🧠 Como o sistema raciocinou", "color:#06c;font-weight:bold");
+                notas.forEach(n => console.log("•", n));
+                console.groupEnd();
+            }
+            const vazios = linhas.filter(l => l["Valor final"] === "— (vazio)").map(l => l.Campo);
+            if (vazios.length) {
+                console.warn("⚠️ Campos que NÃO foram preenchidos:", vazios.join(", "));
+            }
+            console.groupEnd();
+        }
+    };
+}
+
+function logTextoBrutoPDF(rotulo, nomeArquivo, texto, numPaginas) {
+    if (rotulo in ultimosTextosPDF) ultimosTextosPDF[rotulo] = texto;
+    else ultimosTextosPDF.outro = texto;
+
+    if (!DEBUG_EXTRACAO.ativo) return;
+
+    console.groupCollapsed(
+        `%c📄 AutoMed — TEXTO BRUTO DO PDF (${rotulo}): ${nomeArquivo}`,
+        "color:#a06;font-weight:bold"
+    );
+    console.log(`Páginas: ${numPaginas} | Caracteres lidos: ${texto.length}`);
+    console.log(texto);
+    if (!texto.trim()) {
+        console.warn("⚠️ O PDF não devolveu texto algum — provavelmente é um PDF digitalizado (imagem), sem camada de texto.");
+    }
+    console.groupEnd();
+}
+
 /* ============================================================
    MÓDULO 5 — UTILITÁRIOS DE TEXTO
-   O que este arquivo faz: funções pequenas e genéricas de limpeza de
-   texto, reaproveitadas por vários formatadores e extratores.
    ============================================================ */
-
-/**
- * Limpa espaços/quebras de linha e normaliza a pontuação de um texto
- * extraído do PDF (o PDF costuma vir com espaços e quebras de linha
- * bagunçados).
- */
 function normalizarTexto(texto) {
     if (!texto) return "";
     return texto
-        .replace(/[\r\n]+/g, " ")     // quebras de linha viram espaço
-        .replace(/\s{2,}/g, " ")      // vários espaços seguidos viram um só
-        .replace(/\s+,/g, ",")        // remove espaço antes de vírgula
-        .replace(/,\s*/g, ", ")       // garante um espaço depois da vírgula
-        .replace(/,+/g, ",")          // remove vírgulas duplicadas
-        .replace(/,\s*,/g, ", ")      // remove vírgula duplicada com espaço no meio
-        .replace(/\s+([.;:])/g, "$1") // remove espaço antes de . ; :
-        .replace(/\s{2,}/g, " ")      // reforça a limpeza de espaços duplos
-        .trim();                       // remove espaços nas pontas
+        .replace(/[\r\n]+/g, " ")
+        .replace(/\s{2,}/g, " ")
+        .replace(/\s+,/g, ",")
+        .replace(/,\s*/g, ", ")
+        .replace(/,+/g, ",")
+        .replace(/,\s*,/g, ", ")
+        .replace(/\s+([.;:])/g, "$1")
+        .replace(/\s{2,}/g, " ")
+        .trim();
 }
 
-/**
- * Deixa cada palavra com a primeira letra maiúscula
- * (ex.: "SALA DE ESPERA" -> "Sala De Espera").
- */
 function capitalizarPalavras(texto) {
     return texto
         .trim()
@@ -459,37 +486,23 @@ function capitalizarPalavras(texto) {
         .join(" ");
 }
 
-/**
- * Padroniza números de sala/local para o formato "nºX"
- * (ex.: "Sala N° 12" -> "Sala nº12", "Sala 12" -> "Sala nº12").
- */
 function adicionarNumeroLocal(texto) {
     return texto
-        .replace(/\bN[º°]\s*(\d+)/gi, "nº$1")          // já tem "Nº"/"N°": padroniza formato
-        .replace(/(?<!nº)\b(\d+)\b/gi, "nº$1");        // número solto (sem "nº" antes): adiciona o prefixo
+        .replace(/\bN[º°]\s*(\d+)/gi, "nº$1")
+        .replace(/(?<!nº)\b(\d+)\b/gi, "nº$1");
 }
+
 /* ============================================================
    MÓDULO 6 — FORMATADORES
-   O que este arquivo faz: transforma os dados crus (já extraídos do
-   PDF) no formato final que aparece nos documentos: nome do médico
-   com posto abreviado, sigla da OM, especialidade, datas e local.
    ============================================================ */
-
-/**
- * Formata o nome do médico: primeiro tenta um "de-para" exato
- * (medicosConhecidos); senão, identifica o posto militar no início
- * do nome e abrevia; por último, cai para "Primeira Letra Maiúscula".
- */
 function formatarMedico(nome) {
     if (!nome) return "";
     nome = nome.toUpperCase().trim();
 
-    // 1) Nome exato já cadastrado na base de conhecimento.
     if (medicosConhecidos[nome]) {
         return medicosConhecidos[nome];
     }
 
-    // 2) O nome começa com um posto militar conhecido (ex.: "MAJ...")?
     for (let posto in postosMilitares) {
         if (nome.startsWith(posto)) {
             const restante = nome.substring(posto.length).trim();
@@ -497,19 +510,54 @@ function formatarMedico(nome) {
         }
     }
 
-    // 3) Nenhum caso especial: apenas capitaliza cada palavra.
     return nome
         .toLowerCase()
         .replace(/\b\w/g, letra => letra.toUpperCase());
 }
 
-/** Devolve a sigla da OM se ela estiver cadastrada; senão, devolve o nome original. */
-function abreviarOM(om) {
-    if (!om) return "";
-    return omsConhecidas[om] || om;
+function chaveComparacao(texto) {
+    return String(texto || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9]/g, "")
+        .toUpperCase();
 }
 
-/** Procura, no texto, qual especialidade conhecida está presente e a devolve capitalizada. */
+function abreviarOM(om, rastreio = null) {
+    if (!om) return "";
+
+    if (omsConhecidas[om]) {
+        rastreio?.nota(`OM "${om}" encontrada no dicionário (nome exato) → sigla "${omsConhecidas[om]}".`);
+        return omsConhecidas[om];
+    }
+
+    const alvo = chaveComparacao(om);
+
+    for (const nomeCompleto in omsConhecidas) {
+        if (chaveComparacao(nomeCompleto) === alvo) {
+            rastreio?.nota(`OM "${om}" bateu com "${nomeCompleto}" ignorando acento/caixa/espaço → sigla "${omsConhecidas[nomeCompleto]}".`);
+            return omsConhecidas[nomeCompleto];
+        }
+    }
+
+    for (const nomeCompleto in omsConhecidas) {
+        if (chaveComparacao(omsConhecidas[nomeCompleto]) === alvo) {
+            rastreio?.nota(`O PDF já trouxe a OM abreviada ("${om}") → padronizada para "${omsConhecidas[nomeCompleto]}".`);
+            return omsConhecidas[nomeCompleto];
+        }
+    }
+
+    for (const variacao in siglasAlternativasOM) {
+        if (chaveComparacao(variacao) === alvo) {
+            rastreio?.nota(`Sigla "${om}" reconhecida como variação de "${siglasAlternativasOM[variacao]}" (mapa "siglasAlternativasOM").`);
+            return siglasAlternativasOM[variacao];
+        }
+    }
+
+    rastreio?.nota(`OM "${om}" NÃO está no dicionário "omsConhecidas" — mantida exatamente como veio do PDF.`);
+    return om;
+}
+
 function formatarEspecialidade(texto) {
     texto = texto.toUpperCase();
     for (let esp of especialidadesConhecidas) {
@@ -522,7 +570,6 @@ function formatarEspecialidade(texto) {
     return "";
 }
 
-/** Mesma busca de formatarEspecialidade, mas devolve o texto em maiúsculas "cru" (usado na planilha Excel). */
 function extrairEspecialidadeCrua(texto) {
     if (!texto) return "";
     const textoUpper = texto.toUpperCase();
@@ -534,30 +581,22 @@ function extrairEspecialidadeCrua(texto) {
     return "";
 }
 
-/** Converte "dd/mm/aaaa" para "dd/mm/aa" (ano com 2 dígitos). */
 function formatarData(data) {
     if (!data) return "";
     const partes = data.split("/");
-    if (partes.length !== 3) return data;   // formato inesperado: devolve como veio
+    if (partes.length !== 3) return data;
     const dia = partes[0];
     const mes = partes[1];
     const ano = partes[2].slice(-2);
     return `${dia}/${mes}/${ano}`;
 }
 
-/** Converte "dd/mm/aaaa" para o formato militar "d MES aa" (ex.: "5 JUN 26"). */
 function formatarDataAbreviada(data) {
     if (!data) return "";
     const partes = data.split("/");
     return `${parseInt(partes[0])} ${mesesAbreviados[partes[1]]} ${partes[2].slice(-2)}`;
 }
 
-// Os dois formatadores abaixo usam a mesma regra de formatarDataAbreviada,
-// mas recebem nomes próprios para deixar claro, em cada ponto do código,
-// COM QUE FINALIDADE a data está sendo formatada (texto do documento
-// militar vs. nome do arquivo gerado). Se um dia essas duas regras
-// precisarem divergir, já existe um lugar certo para alterar cada uma
-// sem afetar a outra.
 function formatarDataMilitar(data) {
     return formatarDataAbreviada(data);
 }
@@ -566,14 +605,12 @@ function formatarDataNomeArquivo(data) {
     return formatarDataAbreviada(data);
 }
 
-/** Limpa e padroniza o texto do local de atendimento (remove lixo, adiciona "nºX", etc.). */
 function formatarLocal(local) {
     if (!local) return "";
     local = local
-        .replace(/Usuário Marcação.*$/i, "")   // remove tudo a partir de "Usuário Marcação"
-        .replace(/\s*-\s*/g, ", ");             // troca hífen separador por vírgula
+        .replace(/Usuário Marcação.*$/i, "")
+        .replace(/\s*-\s*/g, ", ");
 
-    // Se começar com "Nº Andar", separa o andar do resto com vírgula.
     if (/^(\d+º?\s*Andar)/i.test(local)) {
         local = local.replace(/^(\d+º?\s*Andar)\s*(.*)$/i, "$1, $2");
     }
@@ -581,13 +618,12 @@ function formatarLocal(local) {
     return normalizarTexto(local);
 }
 
-/** Devolve o dia da semana (por extenso, em português) de uma data "dd/mm/aaaa". */
 function diaSemana(data) {
     if (!data) return "";
     const partes = data.split("/");
     const d = new Date(
         parseInt(partes[2]),
-        parseInt(partes[1]) - 1,   // mês em JS começa em 0 (Janeiro = 0)
+        parseInt(partes[1]) - 1,
         parseInt(partes[0])
     );
     const dias = [
@@ -596,22 +632,30 @@ function diaSemana(data) {
     ];
     return dias[d.getDay()];
 }
+
 /* ============================================================
    MÓDULO 7 — EXTRATORES DE DADOS DO PDF
-   O que este arquivo faz: usa expressões regulares (regex) para
-   localizar, dentro do texto bruto de cada PDF, os campos que
-   interessam (paciente, médico, data, local, OM, etc.) e devolve
-   tudo já organizado em um único objeto de dados.
    ============================================================ */
-
-/** Aplica um regex ao texto e devolve o primeiro grupo capturado, já normalizado (ou "" se não achar). */
 function extrair(texto, regex) {
     const match = texto.match(regex);
     if (!match) return "";
     return normalizarTexto(match[1]);
 }
 
-/** Extrai o nome completo da OM que está solicitando o exame, a partir do PDF de Solicitação. */
+function extrairBlocoRemetente(textoSolicitacao, rastreio = null) {
+    if (!textoSolicitacao) return "";
+    const regex = /\bD[oa]\s+([\s\S]{3,120}?)\s+(?:Ao\b|A\s+Sr|À)/gi;
+
+    for (const match of textoSolicitacao.matchAll(regex)) {
+        const bloco = normalizarTexto(match[1]);
+        if (/(comandante|chefe|diretor|diretora|chefia|dire[çc][ãa]o)/i.test(bloco)) {
+            rastreio?.nota(`Bloco do remetente localizado: "${bloco}".`);
+            return bloco;
+        }
+    }
+    return "";
+}
+
 function extrairOMSolicitante(textoSolicitacao) {
     const match = textoSolicitacao.match(
         /(?:Do|Da|Ao)\s+(?:\S*comandante|Chefe|diretor)\s+(?:do|da|ao)\s+(.*?)\s+(?:Ao|À)/i
@@ -620,12 +664,11 @@ function extrairOMSolicitante(textoSolicitacao) {
     return normalizarTexto(match[1]);
 }
 
-/** Identifica se a OM solicitante é do tipo "Comando" ou "Chefia", com base no cargo mencionado no texto. */
-function extrairTipoOM(textoSolicitacao) {
-    const match = textoSolicitacao.match(/Do\s+(.*?)\s+Ao/i);
-    if (!match) return "Comando";   // não achou o cargo: usa "Comando" como padrão seguro
+function extrairTipoOM(textoSolicitacao, rastreio = null) {
+    const bloco = extrairBlocoRemetente(textoSolicitacao);
+    if (!bloco) return "Comando";
 
-    const cargo = normalizarTexto(match[1]).toUpperCase();
+    const cargo = bloco.toUpperCase();
     for (const chave in cargosConhecidos) {
         if (cargo.includes(chave.toUpperCase())) {
             return cargosConhecidos[chave];
@@ -634,45 +677,45 @@ function extrairTipoOM(textoSolicitacao) {
     return "Comando";
 }
 
-/**
- * Extrai TODOS os dados de um agendamento a partir do texto do PDF de
- * Marcação (obrigatório) e, opcionalmente, do texto do PDF de
- * Solicitação (usado para OM, tipo de OM, número e data do DIEx).
- * Devolve um objeto com todos os campos já formatados, ou null se o
- * texto principal estiver vazio.
- */
 function extrairDadosCompletos(texto, textoSolicitacao) {
     if (!texto) return null;
 
-    // --- Paciente: tenta o padrão principal e, se não achar, um padrão alternativo ---
     let paciente = normalizarTexto(
         extrair(texto, /Paciente:\s*\d+\s*-\s*(.*?)\s*Médico\(a\)\/Profissional:/i)
     ).replace(/\s{2,}/g, " ").trim();
 
+    const rastreio = criarRastreio("RASTREIO DA EXTRAÇÃO (Marcação + Solicitação)");
+    let regraPaciente = "Paciente: <cód> - <nome> ... Médico(a)/Profissional:";
+
     if (!paciente) {
+        regraPaciente = "ALTERNATIVO: Especialidade: <nome> Agendamento:";
         paciente = normalizarTexto(
             extrair(texto, /Especialidade:\s*([A-ZÀ-Ú\s]+?)\s*Agendamento:/i)
         );
     }
+    rastreio.registrar("paciente", paciente, paciente, regraPaciente);
 
-    // --- Médico: idem, com um padrão alternativo de fallback ---
     let medico = normalizarTexto(
         extrair(texto, /Médico\(a\)\/Profissional:\s*([A-ZÀ-Ú]+)/i)
     );
+    let regraMedico = "Médico(a)/Profissional: <nome>";
 
     if (!medico) {
+        regraMedico = "ALTERNATIVO: Usuário Marcação: ... Médico/Prof.:";
         const match = texto.match(
             /Usuário Marcação:\s*[A-ZÀ-Ú]+\s*([A-ZÀ-Ú]+)\s*Médico\/Prof\.:/i
         );
         if (match) medico = normalizarTexto(match[1]);
     }
+    rastreio.registrar("medico", medico, medico, regraMedico);
 
-    // --- Data e hora da consulta ---
     let dataHora = extrair(
         texto, /Dia da Consulta:\s*([0-9\/]{10}\s*-\s*[0-9:]{5})/i
     );
+    let regraDataHora = "Dia da Consulta: dd/mm/aaaa - hh:mm";
 
     if (!dataHora) {
+        regraDataHora = "ALTERNATIVO: Agendamento: <data> + primeiro hh:mm do texto";
         const dataTmp = extrair(texto, /Agendamento:\s*([0-9\/]{10})/i);
         const horaTmp = extrair(texto, /([0-9]{2}:[0-9]{2})/i);
 
@@ -690,10 +733,13 @@ function extrairDadosCompletos(texto, textoSolicitacao) {
         horario = partes[1].trim();
     }
 
-    // --- Local do atendimento: padrão principal e um alternativo ---
+    rastreio.registrar("dataHora", dataHora, dataHora, regraDataHora);
+
     let local = extrair(
         texto, /Local da Consulta:\s*(.*?)Usuário da Marcação/i
     );
+    const localBruto = local;
+    let regraLocal = "Local da Consulta: ... Usuário da Marcação";
 
     if (local) {
         const match = local.match(/(.*?)\s*-\s*(.*)/i);
@@ -705,6 +751,7 @@ function extrairDadosCompletos(texto, textoSolicitacao) {
     }
 
     if (!local) {
+        regraLocal = "ALTERNATIVO: manhã|tarde ... Local Consulta: ... Usuário Marcação:";
         const match = texto.match(
             /(?:manh[aã]|tarde)\s+(.*?)\s+Local\s+Consulta:\s*(.*?)\s*Usuário\s+Marcação:/i
         );
@@ -715,16 +762,15 @@ function extrairDadosCompletos(texto, textoSolicitacao) {
         }
     }
 
-    // --- Número do DIEx de solicitação (se o PDF de solicitação foi anexado) ---
+    rastreio.registrar("local", localBruto, local, regraLocal);
+
     let numeroDIEx = "";
     if (textoSolicitacao) {
         const matchNum = textoSolicitacao.match(/DIEx\s*n[º°]?\s*(\d+)/i);
-        if (matchNum) {
-            numeroDIEx = matchNum[1];
-        }
+        if (matchNum) numeroDIEx = matchNum[1];
+        rastreio.registrar("numeroDIEx", matchNum?.[0], numeroDIEx, "DIEx nº <número>");
     }
 
-    // --- Data do DIEx de solicitação: tenta 4 formatos diferentes, em ordem de prioridade ---
     let dataDIEx = "";
     if (textoSolicitacao) {
         const mesesNum = {
@@ -739,45 +785,60 @@ function extrairDadosCompletos(texto, textoSolicitacao) {
         const matchDataMilitar = textoSolicitacao.match(/de\s+(\d{1,2})\s+([A-Z]{3})\s+(\d{2,4})/i);
         const matchDataAssinatura = textoSolicitacao.match(/em\s+(\d{1,2}\/\d{1,2}\/\d{2,4}),?\s*às/i);
 
+        let regraDataDIEx = "";
+        let brutoDataDIEx = "";
+
         if (matchDataExtenso) {
-            // Ex.: "5 de junho de 2026"
+            regraDataDIEx = "1º) data por extenso: <dia> de <mês> de <ano>";
+            brutoDataDIEx = matchDataExtenso[0];
             const dia = matchDataExtenso[1].padStart(2, '0');
             const mesNome = matchDataExtenso[2].toLowerCase();
             const ano = matchDataExtenso[3].length === 2 ? `20${matchDataExtenso[3]}` : matchDataExtenso[3];
             const mes = mesesNum[mesNome] || "01";
             dataDIEx = `${dia}/${mes}/${ano}`;
         } else if (matchDataMilitar) {
-            // Ex.: "de 5 JUN 26"
+            regraDataDIEx = "2º) data militar: de <dia> <MES> <ano>";
+            brutoDataDIEx = matchDataMilitar[0];
             const dia = matchDataMilitar[1].padStart(2, '0');
             const mesNome = matchDataMilitar[2].toLowerCase();
             const ano = matchDataMilitar[3].length === 2 ? `20${matchDataMilitar[3]}` : matchDataMilitar[3];
             const mes = mesesNum[mesNome] || "01";
             dataDIEx = `${dia}/${mes}/${ano}`;
         } else if (matchDataAssinatura) {
-            // Ex.: "...em 05/06/2026, às..."
+            regraDataDIEx = "3º) data da assinatura eletrônica: em <dd/mm/aaaa>, às";
+            brutoDataDIEx = matchDataAssinatura[0];
             dataDIEx = formatarData(matchDataAssinatura[1]);
         } else {
-            // Último recurso: qualquer data solta no texto que não seja a data de nascimento.
+            regraDataDIEx = "4º) ÚLTIMO RECURSO: primeira data solta do texto";
             const matchDataSeparador = textoSolicitacao.match(/(?<!Nascimento:\s*)\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/i);
             if (matchDataSeparador) {
+                brutoDataDIEx = matchDataSeparador[0];
                 dataDIEx = formatarData(matchDataSeparador[1]);
             }
         }
+        rastreio.registrar("dataDIEx", brutoDataDIEx, dataDIEx, regraDataDIEx);
     }
 
-    // --- Campos derivados (calculados a partir dos anteriores) ---
     const especialidade = formatarEspecialidade(texto);
     const especialidadeCrua = extrairEspecialidadeCrua(texto);
+    rastreio.registrar("especialidade", especialidadeCrua, especialidade, "lista 'especialidadesConhecidas'");
 
-    const om = extrairOMSolicitante(textoSolicitacao);
-    const omAbr = abreviarOM(om);
-    const tipoOM = extrairTipoOM(textoSolicitacao);
+    const om = extrairOMSolicitante(textoSolicitacao, rastreio);
+    const omAbr = abreviarOM(om, rastreio);
+    const tipoOM = extrairTipoOM(textoSolicitacao, rastreio);
+    const { cargo: cargoOM, pronome } = tratamentoDoTipoOM(tipoOM);
 
-    const cargoOM = tipoOM === "Comando" ? "Comandante" : "Chefe";
-    const pronome = tipoOM === "Comando" ? "esse" : "essa";
+    rastreio.registrar("om", om, omAbr, "bloco 'Do <cargo> do <OM>'");
+    rastreio.registrar("tipoOM", om ? "cargo do remetente" : "", tipoOM, "cargosConhecidos");
 
     const dataMilitar = formatarDataMilitar(data);
     const dataNomeArquivo = formatarDataNomeArquivo(data);
+
+    const assinatura = `${texto.length}|${(textoSolicitacao || "").length}|${paciente}|${omAbr}`;
+    if (assinatura !== ultimaAssinaturaExtracao) {
+        ultimaAssinaturaExtracao = assinatura;
+        rastreio.imprimir();
+    }
 
     return {
         paciente, medico, dataHora, data, horario, local, especialidade, especialidadeCrua,
@@ -786,83 +847,71 @@ function extrairDadosCompletos(texto, textoSolicitacao) {
     };
 }
 
-/**
- * Extrai os dados específicos de um parecer da Comissão de Ética
- * (sessão, paciente e data), usados na página DOC/Renomeador.
- */
 function extrairDadosComissaoEtica(texto) {
     if (!texto) return null;
 
     const textoNormalizado = normalizarTexto(texto);
-
-    const matchSessao = textoNormalizado.match(
-        /Sess[ãa]o[s]?:?\s*(\d{1,3}\s*\/\s*\d{4})/i
-    );
+    const matchSessao = textoNormalizado.match(/Sess[ãa]o[s]?:?\s*(\d{1,3}\s*\/\s*\d{4})/i);
     const sessao = matchSessao ? matchSessao[1].replace(/\s+/g, "") : "";
 
-    const matchPaciente = textoNormalizado.match(
-        /Paciente:?\s*(.*?)\s*Solicitante/i
-    );
+    const matchPaciente = textoNormalizado.match(/Paciente:?\s*(.*?)\s*Solicitante/i);
     const paciente = matchPaciente ? matchPaciente[1].toUpperCase() : "";
 
-    const matchData = textoNormalizado.match(
-        /\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/
-    );
+    const matchData = textoNormalizado.match(/\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/);
     const data = matchData ? matchData[1] : "";
     const dataFormatada = data ? formatarDataAbreviada(data) : "";
 
+    const assinatura = `etica|${texto.length}|${paciente}|${sessao}`;
+    if (assinatura !== ultimaAssinaturaExtracao) {
+        ultimaAssinaturaExtracao = assinatura;
+        const rastreio = criarRastreio("RASTREIO DA EXTRAÇÃO (Comissão de Ética)");
+        rastreio.registrar("sessao", matchSessao?.[1], sessao, "Sessão: <n>/<ano>");
+        rastreio.registrar("paciente", matchPaciente?.[1], paciente, "Paciente: <nome>");
+        rastreio.registrar("data", data, dataFormatada, "primeira data dd/mm/aaaa");
+        rastreio.imprimir();
+    }
+
     return { sessao, paciente, data, dataFormatada };
 }
+
 /* ============================================================
    MÓDULO 8 — LEITURA DE ARQUIVOS PDF
-   O que este arquivo faz: usa a biblioteca pdf.js (carregada via
-   CDN no HTML) para ler um arquivo PDF escolhido pelo usuário e
-   transformar seu conteúdo em texto puro, que depois é passado para
-   os extratores do MÓDULO 7.
    ============================================================ */
+function rotuloDoPDF(idElementoNome) {
+    if (/Solicitacao/i.test(idElementoNome)) return "solicitacao";
+    if (/ComissaoEtica/i.test(idElementoNome)) return "comissao-etica";
+    if (/Agendamento|Consulta/i.test(idElementoNome)) return "agendamento";
+    return "outro";
+}
 
-/**
- * Lê um arquivo PDF e devolve seu texto através do callback "aoConcluir".
- * @param {File} file - arquivo selecionado/arrastado pelo usuário.
- * @param {string} idElementoNome - id do elemento onde exibir o nome do arquivo.
- * @param {(texto:string)=>void} aoConcluir - chamado com o texto lido, quando pronto.
- * @param {string} mensagemErro - mensagem exibida em um toast caso a leitura falhe.
- */
-function lerTextoDePDF(file, idElementoNome, aoConcluir, mensagemErro) {
-    // Mostra o nome do arquivo imediatamente, antes mesmo da leitura terminar
-    // (feedback visual rápido para o usuário).
+function lerTextoDePDF(file, idElementoNome, aoConcluir, mensagemErro, aoCapturarBytes) {
     document.getElementById(idElementoNome).textContent = file.name;
-
     const reader = new FileReader();
 
-    // Executa quando o arquivo termina de ser carregado em memória.
     reader.onload = async function () {
         try {
+            if (typeof aoCapturarBytes === "function") {
+                aoCapturarBytes({ nome: file.name, bytes: this.result.slice(0) });
+            }
+
             const typedarray = new Uint8Array(this.result);
             const pdf = await pdfjsLib.getDocument(typedarray).promise;
             let texto = "";
 
-            // Percorre cada página do PDF e concatena o texto de todas elas.
             for (let i = 1; i <= pdf.numPages; i++) {
                 const page = await pdf.getPage(i);
                 const content = await page.getTextContent();
                 texto += content.items.map(item => item.str).join(" ") + " ";
             }
 
+            logTextoBrutoPDF(rotuloDoPDF(idElementoNome), file.name, texto, pdf.numPages);
             aoConcluir(texto);
-
         } catch (erro) {
-            console.error(erro);
+            console.error("Falha ao ler o PDF:", file.name, erro);
             mostrarToast(mensagemErro, "erro");
         }
     };
 
-    // REVISÃO: a versão original não tratava falha de LEITURA do arquivo
-    // (por exemplo, arquivo corrompido, removido do disco durante a
-    // leitura, ou sem permissão do sistema operacional) — nesse caso o
-    // usuário não via nenhum aviso e o campo simplesmente nunca era
-    // preenchido. Este "onerror" fecha essa lacuna com o mesmo padrão de
-    // aviso usado no resto do sistema.
     reader.onerror = function () {
         console.error("Erro ao carregar o arquivo:", reader.error);
         mostrarToast(mensagemErro, "erro");
@@ -871,178 +920,83 @@ function lerTextoDePDF(file, idElementoNome, aoConcluir, mensagemErro) {
     reader.readAsArrayBuffer(file);
 }
 
-// --- Página LME ---
-
 function lerPDF(file) {
-    arquivoAgendamentoObj = file;
-    dadosBancoCarregados = null;   // um novo PDF anexado invalida o paciente carregado do banco
-
+    arquivoAgendamentoObj = null;
+    dadosBancoCarregados = null;
     lerTextoDePDF(
-        file,
-        "nomeArquivoAgendamento",
-        texto => {
-            textoPDF = texto;
-            atualizarPainelLME();
-        },
-        "Erro ao ler o PDF."
+        file, "nomeArquivoAgendamento",
+        texto => { textoPDF = texto; atualizarPainelLME(); },
+        "Erro ao ler o PDF.",
+        conteudo => { arquivoAgendamentoObj = conteudo; }
     );
 }
 
 function lerPDFSolicitacao(file) {
-    arquivoSolicitacaoObj = file;
+    arquivoSolicitacaoObj = null;
     dadosBancoCarregados = null;
-
     lerTextoDePDF(
-        file,
-        "nomeArquivoSolicitacao",
-        texto => {
-            textoPDFSolicitacao = texto;
-            atualizarPainelLME();
-        },
-        "Erro ao ler PDF de solicitação."
+        file, "nomeArquivoSolicitacao",
+        texto => { textoPDFSolicitacao = texto; atualizarPainelLME(); },
+        "Erro ao ler PDF de solicitação.",
+        conteudo => { arquivoSolicitacaoObj = conteudo; }
     );
 }
 
-// --- Página DOC (modo LME SCAN) ---
-
 function lerConsultaDoc(file) {
-    lerTextoDePDF(
-        file,
-        "nomeArquivoConsultaDoc",
-        texto => {
-            textoConsultaDoc = texto;
-            atualizarPainelDocLmeScan();
-        },
-        "Erro ao ler o PDF de Marcação."
-    );
+    lerTextoDePDF(file, "nomeArquivoConsultaDoc", texto => { textoConsultaDoc = texto; atualizarPainelDocLmeScan(); }, "Erro ao ler o PDF de Marcação.");
 }
 
 function lerSolicitacaoDoc(file) {
-    lerTextoDePDF(
-        file,
-        "nomeArquivoSolicitacaoDoc",
-        texto => {
-            textoSolicitacaoDoc = texto;
-            atualizarPainelDocLmeScan();
-        },
-        "Erro ao ler o PDF de Solicitação."
-    );
+    lerTextoDePDF(file, "nomeArquivoSolicitacaoDoc", texto => { textoSolicitacaoDoc = texto; atualizarPainelDocLmeScan(); }, "Erro ao ler o PDF de Solicitação.");
 }
 
-/** Guarda o arquivo que será renomeado/baixado — não precisa ler o conteúdo, só o nome. */
 function capturarArquivoRenomear(file) {
     arquivoRenomear = file;
     document.getElementById("nomeArquivoRenomear").textContent = file.name;
 }
 
-// --- Página DOC (modo COMISSÃO DE ÉTICA) ---
-
 function lerComissaoEtica(file) {
-    arquivoRenomear = file;   // aqui o próprio PDF anexado já é o arquivo a ser renomeado
-
-    lerTextoDePDF(
-        file,
-        "nomeArquivoComissaoEtica",
-        texto => {
-            textoComissaoEtica = texto;
-            atualizarPainelComissaoEtica();
-        },
-        "Erro ao ler o PDF da Comissão de Ética."
-    );
+    arquivoRenomear = file;
+    lerTextoDePDF(file, "nomeArquivoComissaoEtica", texto => { textoComissaoEtica = texto; atualizarPainelComissaoEtica(); }, "Erro ao ler o PDF da Comissão de Ética.");
 }
 
-// --- Página EXCEL ---
-
 function lerExcelAgendamento(file) {
-    lerTextoDePDF(
-        file,
-        "nomeArquivoExcelAgendamento",
-        texto => {
-            textoPDFExcelAgendamento = texto;
-            dadosBancoCarregados = null;
-            atualizarLinhaExcel();
-        },
-        "Erro ao ler PDF de Agendamento."
-    );
+    lerTextoDePDF(file, "nomeArquivoExcelAgendamento", texto => { textoPDFExcelAgendamento = texto; dadosBancoCarregados = null; atualizarLinhaExcel(); }, "Erro ao ler PDF de Agendamento.");
 }
 
 function lerExcelSolicitacao(file) {
-    lerTextoDePDF(
-        file,
-        "nomeArquivoExcelSolicitacao",
-        texto => {
-            textoPDFExcelSolicitacao = texto;
-            dadosBancoCarregados = null;
-            atualizarLinhaExcel();
-        },
-        "Erro ao ler PDF de Solicitação."
-    );
+    lerTextoDePDF(file, "nomeArquivoExcelSolicitacao", texto => { textoPDFExcelSolicitacao = texto; dadosBancoCarregados = null; atualizarLinhaExcel(); }, "Erro ao ler PDF de Solicitação.");
 }
+
 /* ============================================================
    MÓDULO 9 — DROPZONES E BOTÕES DE RECOLHER
-   O que este arquivo faz: liga cada área de "arrastar e soltar PDF"
-   ao seu input de arquivo escondido, e controla o botão que
-   recolhe/expande o bloco de dropzones (lembrando o estado escolhido
-   no localStorage).
    ============================================================ */
-
-/**
- * Liga os eventos de clique/arrastar-soltar de uma dropzone ao seu
- * <input type="file"> escondido, chamando "callback(file)" sempre que
- * um arquivo é selecionado (seja por clique, seja por arraste).
- */
 function configurarDropZone(dropZone, inputFile, callback) {
-    // Clicar na área abre o seletor de arquivos do sistema operacional.
-    dropZone.addEventListener("click", () => {
-        inputFile.click();
-    });
-
-    // Feedback visual enquanto o usuário arrasta um arquivo por cima.
-    dropZone.addEventListener("dragover", e => {
-        e.preventDefault();   // necessário para permitir o "drop" depois
-        dropZone.classList.add("hover");
-    });
-
-    dropZone.addEventListener("dragleave", () => {
-        dropZone.classList.remove("hover");
-    });
-
-    // Soltar o arquivo sobre a área: pega o primeiro arquivo arrastado.
+    dropZone.addEventListener("click", () => { inputFile.click(); });
+    dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("hover"); });
+    dropZone.addEventListener("dragleave", () => { dropZone.classList.remove("hover"); });
     dropZone.addEventListener("drop", e => {
         e.preventDefault();
         dropZone.classList.remove("hover");
         const file = e.dataTransfer.files[0];
         if (file) callback(file);
     });
-
-    // Também funciona quando o arquivo é escolhido pela janela do sistema.
     inputFile.addEventListener("change", e => {
         const file = e.target.files[0];
         if (file) callback(file);
     });
 
-    // REVISÃO (acessibilidade): as dropzones são <div>s, que por padrão
-    // não recebem foco de teclado nem são anunciadas como algo clicável
-    // por leitores de tela. Isso torna a dropzone inutilizável para quem
-    // navega só com o teclado. As três linhas abaixo resolvem isso sem
-    // alterar a aparência: tornam a div focável (Tab), anunciam que é um
-    // botão, e fazem Enter/Espaço disparar o mesmo clique do mouse.
-    if (!dropZone.hasAttribute("tabindex")) {
-        dropZone.setAttribute("tabindex", "0");
-    }
-    if (!dropZone.hasAttribute("role")) {
-        dropZone.setAttribute("role", "button");
-    }
+    if (!dropZone.hasAttribute("tabindex")) dropZone.setAttribute("tabindex", "0");
+    if (!dropZone.hasAttribute("role")) dropZone.setAttribute("role", "button");
+
     dropZone.addEventListener("keydown", e => {
         if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();   // evita rolar a página ao pressionar espaço
+            e.preventDefault();
             inputFile.click();
         }
     });
 }
 
-// Liga cada par (dropzone, input) já existente no HTML à sua função
-// de leitura correspondente (ver MÓDULO 8, logo acima).
 configurarDropZone(dropZone, pdfFile, lerPDF);
 configurarDropZone(dropZoneSolicitacao, pdfSolicitacao, lerPDFSolicitacao);
 configurarDropZone(dropZoneDocConsulta, pdfConsultaDoc, lerConsultaDoc);
@@ -1052,31 +1006,18 @@ configurarDropZone(dropZoneComissaoEtica, pdfComissaoEtica, lerComissaoEtica);
 configurarDropZone(dropZoneExcelAgendamento, pdfExcelAgendamento, lerExcelAgendamento);
 configurarDropZone(dropZoneExcelSolicitacao, pdfExcelSolicitacao, lerExcelSolicitacao);
 
-
-/**
- * Liga o clique no cabeçalho de um bloco de dropzones ao
- * recolher/expandir do conteúdo abaixo dele, lembrando a preferência
- * do usuário no localStorage (persiste entre sessões).
- */
 function configurarToggleDropzone(headerId, containerId, storageKey) {
     const header = document.getElementById(headerId);
     const container = document.getElementById(containerId);
-
-    if (!header || !container) return;   // página sem esse bloco: não faz nada
+    if (!header || !container) return;
 
     function aplicarEstadoDropzone(recolher) {
-        if (recolher) {
-            container.classList.add("recolhido");
-        } else {
-            container.classList.remove("recolhido");
-        }
+        if (recolher) container.classList.add("recolhido");
+        else container.classList.remove("recolhido");
     }
 
-    // Restaura o estado salvo da última vez que o usuário usou o sistema.
     const estaRecolhido = localStorage.getItem(storageKey) === "true";
-    if (estaRecolhido) {
-        aplicarEstadoDropzone(true);
-    }
+    if (estaRecolhido) aplicarEstadoDropzone(true);
 
     header.addEventListener("click", () => {
         const recolher = !container.classList.contains("recolhido");
@@ -1088,17 +1029,11 @@ function configurarToggleDropzone(headerId, containerId, storageKey) {
 configurarToggleDropzone("headerDropzoneLme", "areaDropzoneLme", "automed_dropzoneLmeRecolhido");
 configurarToggleDropzone("headerDropzoneExcel", "areaDropzoneExcel", "automed_dropzoneExcelRecolhido");
 configurarToggleDropzone("headerDropzoneDoc", "areaDropzoneDoc", "automed_dropzoneDocRecolhido");
+
 /* ============================================================
    MÓDULO 10 — ATUALIZAÇÃO DOS PAINÉIS DE DADOS EXTRAÍDOS
-   O que este arquivo faz: pega os dados já extraídos (ou carregados
-   do banco) e escreve cada valor no card correspondente da tela,
-   em cada uma das páginas (LME, DOC e EXCEL).
    ============================================================ */
-
-/** Atualiza os cards "Dados Extraídos" da página LME. */
 function atualizarPainelLME() {
-    // Se um paciente foi carregado do banco, usa esses dados; senão,
-    // extrai novamente a partir dos PDFs anexados.
     const dados = dadosBancoCarregados || extrairDadosCompletos(textoPDF, textoPDFSolicitacao);
     if (!dados) return;
 
@@ -1123,7 +1058,6 @@ function atualizarPainelLME() {
     if (dbgTipoOM) dbgTipoOM.textContent = dados.tipoOM || "-";
 }
 
-/** Atualiza os cards da página DOC quando está no modo "LME SCAN", e sugere o nome do arquivo. */
 function atualizarPainelDocLmeScan() {
     const dados = extrairDadosCompletos(textoConsultaDoc, textoSolicitacaoDoc);
     if (!dados) return;
@@ -1134,7 +1068,6 @@ function atualizarPainelDocLmeScan() {
     if (dbgPacienteDoc) dbgPacienteDoc.textContent = dados.paciente || "-";
     if (dbgEspecialidadeDoc) dbgEspecialidadeDoc.textContent = dados.especialidade || "-";
 
-    // OM e Data só existem depois que o PDF de Solicitação também foi lido.
     if (textoSolicitacaoDoc) {
         const dbgOMAbrDoc = document.getElementById("dbgOMAbrDoc");
         const dbgDataDoc = document.getElementById("dbgDataDoc");
@@ -1143,17 +1076,12 @@ function atualizarPainelDocLmeScan() {
         if (dbgDataDoc) dbgDataDoc.textContent = dados.data || "-";
 
         const campoNome = document.getElementById("nomeArquivoGerado");
-
-        // Só preenche automaticamente se o campo ainda estiver vazio —
-        // não sobrescreve um nome que o usuário já tenha digitado/editado.
         if (campoNome && !campoNome.value) {
-            campoNome.value =
-                `${dados.paciente} - ${dados.omAbr} - ${dados.dataNomeArquivo} - ${dados.especialidade}.pdf`;
+            campoNome.value = `${dados.paciente} - ${dados.omAbr} - ${dados.dataNomeArquivo} - ${dados.especialidade}.pdf`;
         }
     }
 }
 
-/** Atualiza os cards da página DOC quando está no modo "COMISSÃO DE ÉTICA". */
 function atualizarPainelComissaoEtica() {
     const dados = extrairDadosComissaoEtica(textoComissaoEtica);
     if (!dados) return;
@@ -1174,19 +1102,16 @@ function atualizarPainelComissaoEtica() {
     }
 }
 
-/** Converte "dd/mm/aaaa" (dentro de um texto qualquer) para "dd/mm/aa". */
 function formatarDataAno2Digitos(textoData) {
     if (!textoData) return "";
     return textoData.replace(/\b(\d{1,2}\/\d{1,2}\/)\d{2}(\d{2})\b/g, "$1$2");
 }
 
-/** Monta a linha de texto (separada por " - ") que será colada na planilha Excel. */
 function atualizarLinhaExcel() {
     const campoResultado = document.getElementById("resultadoExcel");
     if (!campoResultado) return;
 
     const dados = dadosBancoCarregados || extrairDadosCompletos(textoPDFExcelAgendamento, textoPDFExcelSolicitacao);
-
     if (!dados) {
         campoResultado.value = "";
         return;
@@ -1194,16 +1119,8 @@ function atualizarLinhaExcel() {
 
     const nome = dados.paciente || "";
     const agendado = "Agendado";
-
-    // Remove o hífen: "22/09/26 - 08:00" vira "22/09/26 08:00".
     const dataHoraBruta = (dados.dataHora || "").replace(/\s*-\s*/, " ");
     const dataHora = formatarDataAno2Digitos(dataHoraBruta);
-
-    // NOTA DE REVISÃO: as colunas abaixo ("Não", "Não", "Sim") são
-    // valores fixos definidos propositalmente — representam colunas da
-    // planilha que este sistema sempre preenche com o mesmo padrão
-    // (não foram esquecidas nem são um bug). Caso a regra de negócio
-    // mude, é só editar os três valores aqui.
     const nao1 = "Não";
     const nao2 = "Não";
     const numDIEx = dados.numeroDIEx || "";
@@ -1213,19 +1130,12 @@ function atualizarLinhaExcel() {
     const medico = formatarMedico(dados.medico) || "";
     const sim = "Sim";
 
-    const linhaVisual = `${nome} - ${agendado} - ${dataHora} - ${nao1} - ${nao2} - ${numDIEx} - ${dataDIEx} - ${omAbr} - ${especialidadeExcel} - ${medico} - ${sim}`;
-
-    campoResultado.value = linhaVisual;
+    campoResultado.value = `${nome} - ${agendado} - ${dataHora} - ${nao1} - ${nao2} - ${numDIEx} - ${dataDIEx} - ${omAbr} - ${especialidadeExcel} - ${medico} - ${sim}`;
 }
+
 /* ============================================================
    MÓDULO 11 — GERADOR DE DIEx (PÁGINA LME)
-   O que este arquivo faz: controla a escolha do modelo de texto,
-   preenche as variáveis ({PACIENTE}, {MEDICO}, etc.) com os dados
-   extraídos e copia o resultado final para a área de transferência.
    ============================================================ */
-
-// Restaura as últimas escolhas do usuário (select de modelo, pronome
-// do paciente e select de conferência/laudo), salvas no localStorage.
 if (localStorage.getItem("automed_modeloSelect")) {
     modeloSelect.value = localStorage.getItem("automed_modeloSelect");
 }
@@ -1236,12 +1146,6 @@ if (localStorage.getItem("automed_tipoLaudoConferenciaSelect") && tipoLaudoConfe
     tipoLaudoConferenciaSelect.value = localStorage.getItem("automed_tipoLaudoConferenciaSelect");
 }
 
-/**
- * Atualiza apenas os pequenos trechos "variáveis" dentro dos modelos
- * de texto (os <span class="var-..."> no HTML), de acordo com a
- * escolha do select "Conferência / Laudo". Assim não é preciso
- * reescrever o modelo inteiro, só os pedaços que mudam.
- */
 function atualizarVariaveisModelo() {
     if (!tipoLaudoConferenciaSelect) return;
 
@@ -1263,7 +1167,6 @@ function atualizarVariaveisModelo() {
     });
 }
 
-/** Mostra o modelo de texto escolhido no select e esconde os outros. */
 function alternarModeloTexto() {
     localStorage.setItem("automed_modeloSelect", modeloSelect.value);
 
@@ -1272,7 +1175,6 @@ function alternarModeloTexto() {
 
     if (modeloSelect.value === "agendamento") {
         document.getElementById("modelo_agendamento").style.display = "block";
-        // O modelo de agendamento não usa "Conferência/Laudo": esconde o select.
         if (tipoLaudoConferenciaSelect) {
             tipoLaudoConferenciaSelect.classList.add("oculto-select");
         }
@@ -1303,9 +1205,8 @@ if (tipoLaudoConferenciaSelect) {
 }
 
 modeloSelect.addEventListener("change", alternarModeloTexto);
-alternarModeloTexto();   // aplica o estado inicial assim que a página carrega
+alternarModeloTexto();
 
-/** Converte marcações simples de negrito ("**texto**" ou "*texto*") em HTML "<b>texto</b>". */
 function converterNegritos(texto) {
     if (!texto) return "";
     return texto
@@ -1313,11 +1214,7 @@ function converterNegritos(texto) {
         .replace(/\*(.*?)\*/g, "<b>$1</b>");
 }
 
-// Botão "GERAR DIEx": substitui as variáveis {PLACEHOLDER} do modelo
-// escolhido pelos dados extraídos (ou carregados do banco) e escreve
-// o resultado final na área "Resultado".
 document.getElementById("gerarBtn").addEventListener("click", () => {
-
     if (!textoPDF && !dadosBancoCarregados) {
         mostrarToast("Carregue um PDF ou selecione um paciente do Banco de Dados primeiro.", "aviso");
         return;
@@ -1326,10 +1223,9 @@ document.getElementById("gerarBtn").addEventListener("click", () => {
     const dados = dadosBancoCarregados || extrairDadosCompletos(textoPDF, textoPDFSolicitacao);
     if (!dados) return;
 
-    atualizarPainelLME();   // garante que os cards laterais reflitam os dados usados
+    atualizarPainelLME();
 
     let modeloEl = null;
-
     if (modeloSelect.value === "agendamento") {
         modeloEl = document.getElementById("modelo_agendamento");
     } else if (modeloSelect.value === "s2") {
@@ -1343,7 +1239,6 @@ document.getElementById("gerarBtn").addEventListener("click", () => {
     let modelo = modeloEl.innerHTML;
     const pronomePacienteTexto = pronomePaciente.value;
 
-    // Troca cada {VARIAVEL} pelo valor correspondente dos dados extraídos.
     let resultado = modelo
         .replace(/{PACIENTE}/g, dados.paciente || "")
         .replace(/{MEDICO}/g, formatarMedico(dados.medico) || "")
@@ -1361,14 +1256,9 @@ document.getElementById("gerarBtn").addEventListener("click", () => {
         .replace(/{PRONOMEPACIENTE}/g, pronomePacienteTexto || "");
 
     resultado = converterNegritos(resultado);
-
-    const campoResultado = document.getElementById("resultado");
-    campoResultado.innerHTML = resultado;
+    document.getElementById("resultado").innerHTML = resultado;
 });
 
-// Botão "COPIAR TEXTO": copia o resultado gerado para a área de
-// transferência, preservando negrito (HTML) para colar em editores
-// como o Word, com um texto simples como alternativa.
 document.getElementById("copiarBtn").addEventListener("click", async () => {
     const elementoResultado = document.getElementById("resultado");
     if (!elementoResultado || !elementoResultado.innerText.trim()) {
@@ -1382,23 +1272,16 @@ document.getElementById("copiarBtn").addEventListener("click", async () => {
     let htmlParaWord = htmlContent
         .replace(/\r\n/g, "<br>")
         .replace(/\n/g, "<br>")
-        .replace(/(<br\s*\/?>\s*){3,}/gi, "<br><br>");   // evita blocos gigantes de linhas em branco
+        .replace(/(<br\s*\/?>\s*){3,}/gi, "<br><br>");
 
     try {
         if (navigator.clipboard && window.ClipboardItem) {
-            // Navegadores modernos: copia HTML e texto puro ao mesmo tempo.
             const blobHtml = new Blob([htmlParaWord], { type: "text/html" });
             const blobText = new Blob([plainText], { type: "text/plain" });
-
-            const item = new ClipboardItem({
-                "text/html": blobHtml,
-                "text/plain": blobText
-            });
-
+            const item = new ClipboardItem({ "text/html": blobHtml, "text/plain": blobText });
             await navigator.clipboard.write([item]);
             mostrarToast("Texto copiado com sucesso!", "sucesso");
         } else {
-            // Alternativa para navegadores sem suporte à Clipboard API moderna.
             const range = document.createRange();
             range.selectNodeContents(elementoResultado);
             const selection = window.getSelection();
@@ -1413,18 +1296,14 @@ document.getElementById("copiarBtn").addEventListener("click", async () => {
         mostrarToast("Não foi possível copiar o texto automaticamente.", "erro");
     }
 });
+
 /* ============================================================
    MÓDULO 12 — RENOMEADOR DE DOCUMENTOS (PÁGINA DOC)
-   O que este arquivo faz: monta o nome padronizado do arquivo (LME
-   Scan ou Comissão de Ética) e baixa o PDF anexado já com esse nome.
    ============================================================ */
-
-// Restaura o último tipo de documento escolhido (LME Scan / Comissão de Ética).
 if (localStorage.getItem("automed_tipoDocumento")) {
     tipoDocumentoSelect.value = localStorage.getItem("automed_tipoDocumento");
 }
 
-/** Alterna a página DOC entre os modos "LME SCAN" e "COMISSÃO DE ÉTICA". */
 function alternarTipoDocumento() {
     localStorage.setItem("automed_tipoDocumento", tipoDocumentoSelect.value);
 
@@ -1438,20 +1317,16 @@ function alternarTipoDocumento() {
 
     blocoLmeScan.classList.toggle("oculto", comissaoSelecionada);
     blocoComissaoEtica.classList.toggle("oculto", !comissaoSelecionada);
-
     painelExtraidosLmeScan.classList.toggle("oculto", comissaoSelecionada);
     painelExtraidosComissao.classList.toggle("oculto", !comissaoSelecionada);
 
-    // Troca de modo sempre limpa o nome gerado e o arquivo pendente,
-    // para não misturar dados de um modo com o outro.
     document.getElementById("nomeArquivoGerado").value = "";
     arquivoRenomear = null;
 }
 
 tipoDocumentoSelect.addEventListener("change", alternarTipoDocumento);
-alternarTipoDocumento();   // aplica o estado inicial assim que a página carrega
+alternarTipoDocumento();
 
-/** Gera o nome padronizado no modo "LME SCAN": "Paciente - OM - Data - Especialidade.pdf". */
 function gerarNomeArquivoLmeScan() {
     if (!textoConsultaDoc || !textoSolicitacaoDoc) {
         mostrarToast("Carregue os PDFs de Marcação e Solicitação.", "aviso");
@@ -1459,14 +1334,12 @@ function gerarNomeArquivoLmeScan() {
     }
 
     const dados = extrairDadosCompletos(textoConsultaDoc, textoSolicitacaoDoc);
-
     if (dados) {
         document.getElementById("nomeArquivoGerado").value =
             `${dados.paciente} - ${dados.omAbr} - ${dados.dataNomeArquivo} - ${dados.especialidade}.pdf`;
     }
 }
 
-/** Monta o nome padronizado no modo "COMISSÃO DE ÉTICA": "Sessão - Paciente - Data.pdf". */
 function montarNomeComissaoEtica(dados) {
     const sessaoArquivo = dados.sessao.replace("/", "-");
     return `${sessaoArquivo} - ${dados.paciente} - ${dados.dataFormatada}.pdf`;
@@ -1479,7 +1352,6 @@ function gerarNomeArquivoComissaoEtica() {
     }
 
     const dados = extrairDadosComissaoEtica(textoComissaoEtica);
-
     if (!dados || !dados.sessao || !dados.paciente || !dados.dataFormatada) {
         mostrarToast("Não foi possível extrair todos os dados deste PDF. Digite manualmente.", "erro");
         return;
@@ -1488,8 +1360,6 @@ function gerarNomeArquivoComissaoEtica() {
     document.getElementById("nomeArquivoGerado").value = montarNomeComissaoEtica(dados);
 }
 
-// Botão "GERAR NOME": decide qual das duas funções acima chamar,
-// conforme o modo selecionado no momento.
 document.getElementById("gerarNomeBtn").addEventListener("click", () => {
     if (tipoDocumentoSelect.value === "a") {
         gerarNomeArquivoComissaoEtica();
@@ -1498,32 +1368,21 @@ document.getElementById("gerarNomeBtn").addEventListener("click", () => {
     }
 });
 
-/**
- * FUNCIONALIDADE NOVA: remove do nome do arquivo os caracteres que o
- * Windows/macOS/Linux não aceitam em nomes de arquivo (/ \ : * ? " < > |).
- * O campo "nomeArquivoGerado" é editável livremente pelo usuário — sem
- * essa limpeza, um caractere digitado por engano faria o download falhar
- * silenciosamente ou salvar com um nome truncado/diferente do esperado.
- */
 function sanitizarNomeArquivo(nome) {
     return nome.replace(/[\/\\:*?"<>|]/g, "_").trim();
 }
 
-/** Dispara o download de um arquivo (Blob/File) no navegador, com o nome escolhido. */
 function baixarArquivoComNome(arquivo, nome) {
     const url = URL.createObjectURL(arquivo);
     const a = document.createElement("a");
     a.href = url;
     a.download = nome;
-
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-
-    URL.revokeObjectURL(url);   // libera a memória usada pelo link temporário
+    URL.revokeObjectURL(url);
 }
 
-// Botão "BAIXAR PDF": valida se há arquivo e nome antes de baixar.
 document.getElementById("renomearBtn").addEventListener("click", () => {
     if (!arquivoRenomear) {
         mostrarToast("Anexe o PDF a ser renomeado.", "aviso");
@@ -1531,7 +1390,6 @@ document.getElementById("renomearBtn").addEventListener("click", () => {
     }
 
     const novoNome = sanitizarNomeArquivo(document.getElementById("nomeArquivoGerado").value.trim());
-
     if (!novoNome) {
         mostrarToast("Gere ou preencha o nome do arquivo antes de baixar.", "aviso");
         return;
@@ -1540,14 +1398,11 @@ document.getElementById("renomearBtn").addEventListener("click", () => {
     baixarArquivoComNome(arquivoRenomear, novoNome);
 });
 
-// Campo de busca de paciente na página DOC: ao digitar um nome que já
-// existe no banco, preenche os cards e o nome do arquivo automaticamente.
 document.getElementById("inputPesquisaDoc")?.addEventListener("input", (e) => {
     const valorDigitado = e.target.value;
 
     if (mapaPacientesBanco.has(valorDigitado)) {
         const dados = mapaPacientesBanco.get(valorDigitado);
-
         const dbgPacienteDoc = document.getElementById("dbgPacienteDoc");
         const dbgOMAbrDoc = document.getElementById("dbgOMAbrDoc");
         const dbgDataDoc = document.getElementById("dbgDataDoc");
@@ -1563,7 +1418,6 @@ document.getElementById("inputPesquisaDoc")?.addEventListener("input", (e) => {
             campoNome.value = `${dados.paciente} - ${dados.omAbr} - ${dados.dataNomeArquivo} - ${dados.especialidade}.pdf`;
         }
     } else if (valorDigitado === "") {
-        // Campo de busca limpo: reseta os cards para o estado vazio.
         const dbgPacienteDoc = document.getElementById("dbgPacienteDoc");
         const dbgOMAbrDoc = document.getElementById("dbgOMAbrDoc");
         const dbgDataDoc = document.getElementById("dbgDataDoc");
@@ -1578,19 +1432,15 @@ document.getElementById("inputPesquisaDoc")?.addEventListener("input", (e) => {
         if (campoNome) campoNome.value = "";
     }
 });
+
 /* ============================================================
    MÓDULO 13 — NAVEGAÇÃO ENTRE ABAS/PÁGINAS E MENU DO RODAPÉ
-   O que este arquivo faz: troca a página visível (LME/DOC/EXCEL/
-   BANCO) quando uma aba é clicada, decidindo a direção da animação,
-   e controla o botão que recolhe o rodapé inteiro.
    ============================================================ */
-
 const abas = document.querySelectorAll(".aba");
 const paginas = document.querySelectorAll(".pagina");
-const ordemPaginas = ["lme", "doc", "excel", "banco"];   // ordem usada para decidir a direção do slide
-let abaAtualNome = "lme";
+const ordemPaginas = ["banco", "lme", "excel", "doc"];
+let abaAtualNome = "banco";
 
-/** Ativa a página "nomeAba", aplicando a animação de slide na direção correta. */
 function ativarAba(nomeAba) {
     const abaAlvo = document.querySelector(`.aba[data-aba="${nomeAba}"]`);
     const paginaAlvo = document.getElementById("pagina-" + nomeAba);
@@ -1599,7 +1449,6 @@ function ativarAba(nomeAba) {
         const indexAtual = ordemPaginas.indexOf(abaAtualNome);
         const indexNova = ordemPaginas.indexOf(nomeAba);
 
-        // Desativa tudo antes de ativar a nova aba/página.
         abas.forEach(a => a.classList.remove("ativa"));
         paginas.forEach(p => {
             p.classList.remove("ativa", "slide-direita", "slide-esquerda");
@@ -1608,8 +1457,6 @@ function ativarAba(nomeAba) {
         abaAlvo.classList.add("ativa");
         paginaAlvo.classList.add("ativa");
 
-        // Página mais à direita na ordem: desliza entrando pela direita.
-        // Página mais à esquerda: desliza entrando pela esquerda.
         if (indexNova > indexAtual) {
             paginaAlvo.classList.add("slide-direita");
         } else if (indexNova < indexAtual) {
@@ -1617,15 +1464,11 @@ function ativarAba(nomeAba) {
         }
 
         abaAtualNome = nomeAba;
+        sincronizarTravaDeRolagem();
     }
 }
 
-// Ao carregar a página, retoma a última aba usada (se houver uma salva).
-const abaSalva = localStorage.getItem("automed_abaAtiva");
-if (abaSalva && ordemPaginas.includes(abaSalva)) {
-    abaAtualNome = abaSalva;
-    ativarAba(abaSalva);
-}
+ativarAba("banco");
 
 abas.forEach(botao => {
     botao.addEventListener("click", () => {
@@ -1635,8 +1478,6 @@ abas.forEach(botao => {
     });
 });
 
-// Botão "▼" do rodapé: recolhe/expande o menu de abas, lembrando a
-// preferência do usuário.
 const btnAbas = document.getElementById("toggleAbas");
 const footerSistema = document.getElementById("footerSistema");
 
@@ -1649,57 +1490,60 @@ if (btnAbas && footerSistema) {
         footerSistema.classList.toggle("recolhido");
         const estaRecolhido = footerSistema.classList.contains("recolhido");
         localStorage.setItem("automed_footerRecolhido", estaRecolhido);
+        ajustarAlturaListaRegistros();
     });
 }
+
 /* ============================================================
    MÓDULO 14 — BANCO DE DADOS LOCAL, CONEXÃO E MODAIS
-   O que este arquivo faz: usa a File System Access API do navegador
-   para ler/gravar uma pasta escolhida pelo usuário no próprio
-   computador, guardando um subdiretório por paciente com um
-   "dados.json" e os PDFs originais. Também controla os modais de
-   "paciente duplicado" e "confirmar exclusão".
    ============================================================ */
-
-// Guardam temporariamente os dados envolvidos em cada modal aberto,
-// para os botões de confirmação saberem em cima de qual registro agir.
 let pacienteExistenteModal = null;
 let pacienteNovoModal = null;
 let pacienteExcluirModal = null;
 
-// 1. CONEXÃO COM A PASTA DO BANCO DE DADOS
-document.getElementById("btnConectarBanco")?.addEventListener("click", async () => {
+/* Quais PDFs acompanham o paciente que está no modal de duplicidade.
+   Antes o modal ia buscar os arquivos direto nas variáveis do LME; com
+   a página BANCO também salvando pacientes (v1.6.2), quem abre o modal
+   é que diz quais são os anexos daquele salvamento. */
+let anexosPendentesModal = [];
+
+async function conectarPastaDoBanco(mensagemSucesso) {
+    if (dirHandleBanco && !podeDescartarEdicaoAberta()) return;
+
     try {
-        // Abre o seletor de pastas nativo do sistema operacional.
-        dirHandleBanco = await window.showDirectoryPicker({ mode: 'readwrite' });
-        const statusPermissao = await dirHandleBanco.requestPermission({ mode: 'readwrite' });
+        const novaPasta = await window.showDirectoryPicker({ mode: 'readwrite' });
+        const statusPermissao = await novaPasta.requestPermission({ mode: 'readwrite' });
 
         if (statusPermissao !== 'granted') {
             mostrarToast("Você precisa permitir o acesso para o banco funcionar.", "aviso");
             return;
         }
 
-        const statusEl = document.getElementById("statusBanco");
-        if (statusEl) {
-            statusEl.textContent = `CONECTADO`;
-            statusEl.style.color = "#c7d59f";
-        }
+        fecharRegistroAberto();
+        dirHandleBanco = novaPasta;
 
         try {
             await atualizarListaPacientesBanco();
-            mostrarToast("Banco de dados conectado com sucesso!", "sucesso");
+            mostrarToast(mensagemSucesso, "sucesso");
         } catch (e) {
             console.warn("Conectado, mas houve erro ao listar pastas:", e);
         }
 
     } catch (erro) {
-        if (erro.name === 'AbortError') return;   // usuário cancelou a janela: não é erro
+        if (erro.name === 'AbortError') return;
         console.error("Erro na conexão:", erro);
         mostrarToast("Erro técnico ao conectar.", "erro");
     }
+}
+
+document.getElementById("btnConectarBanco")?.addEventListener("click", () => {
+    conectarPastaDoBanco("Banco de dados conectado com sucesso!");
 });
 
-// 2. ATUALIZAÇÃO DA LISTA DE PACIENTES SALVOS NA PASTA
-/** Varre todas as subpastas do banco, lê o "dados.json" de cada uma e monta a lista de sugestões da busca. */
+document.getElementById("btnReconectarBanco")?.addEventListener("click", () => {
+    conectarPastaDoBanco("Pasta do banco trocada com sucesso!");
+});
+
 async function atualizarListaPacientesBanco() {
     if (!dirHandleBanco) return;
 
@@ -1711,7 +1555,7 @@ async function atualizarListaPacientesBanco() {
 
     try {
         for await (const entry of dirHandleBanco.values()) {
-            if (entry.kind !== 'directory') continue;   // ignora arquivos soltos na raiz
+            if (entry.kind !== 'directory') continue;
 
             try {
                 const pastaHandle = entry;
@@ -1720,8 +1564,7 @@ async function atualizarListaPacientesBanco() {
                 const textoJson = await file.text();
                 const dados = JSON.parse(textoJson);
 
-                dados._nomePasta = entry.name;   // guarda o nome da pasta para permitir excluir depois
-
+                dados._nomePasta = entry.name;
                 const identificador = `${dados.paciente} - ${dados.omAbr} (${dados.data})`;
                 mapaPacientesBanco.set(identificador, dados);
 
@@ -1729,31 +1572,26 @@ async function atualizarListaPacientesBanco() {
                 option.value = identificador;
                 datalist.appendChild(option);
             } catch (err) {
-                continue;   // pasta sem "dados.json" válido: ignora e segue para a próxima
+                continue;
             }
         }
     } catch (erro) {
         console.error("Erro ao varrer a pasta principal:", erro);
     }
 
-    // FUNCIONALIDADE NOVA: recalcula o resumo estatístico sempre que a
-    // lista de pacientes é recarregada (ver MÓDULO 19, mais abaixo).
     atualizarEstatisticasBanco();
+    renderizarRegistrosBanco();
 }
 
-// 3. SELEÇÃO DE PACIENTE PELA BARRA DE PESQUISA DO BANCO (página LME)
 document.getElementById("inputPesquisaBanco")?.addEventListener("input", (e) => {
     const valorDigitado = e.target.value;
 
     if (mapaPacientesBanco.has(valorDigitado)) {
         dadosBancoCarregados = mapaPacientesBanco.get(valorDigitado);
-
-        // Um paciente vindo do banco substitui os PDFs recém-anexados.
         textoPDF = "";
         textoPDFSolicitacao = "";
         arquivoAgendamentoObj = null;
         arquivoSolicitacaoObj = null;
-
         atualizarPainelLME();
     } else if (valorDigitado === "") {
         dadosBancoCarregados = null;
@@ -1761,19 +1599,15 @@ document.getElementById("inputPesquisaBanco")?.addEventListener("input", (e) => 
     }
 });
 
-// 4. FUNÇÃO AUXILIAR DE NORMALIZAÇÃO DE NOME PARA COMPARAR
-/** Remove acentos, deixa maiúsculo e tira tudo que não for letra/número — usado só para COMPARAR nomes, não para exibir. */
 function normalizarParaComparacao(texto) {
     if (!texto) return "";
     return texto
         .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")   // remove os acentos (separados pelo normalize NFD)
+        .replace(/[\u0300-\u036f]/g, "")
         .toUpperCase()
         .replace(/[^A-Z0-9]/g, "");
 }
 
-// 5. BUSCA DUPLICATA DE PACIENTE
-/** Procura, no mapa de pacientes já carregados, alguém com o mesmo nome (ignorando acentos/maiúsculas). */
 function buscarPacienteExistentePorNome(nomePaciente) {
     if (!nomePaciente) return null;
     const nomeAlvo = normalizarParaComparacao(nomePaciente);
@@ -1786,12 +1620,10 @@ function buscarPacienteExistentePorNome(nomePaciente) {
     return null;
 }
 
-// 6. CONTROLADORES DOS MODAIS
-
-/** Abre o modal comparando o registro já salvo com o novo que está prestes a ser gravado. */
-function abrirModalDuplicidade(existente, novo) {
+function abrirModalDuplicidade(existente, novo, anexos = []) {
     pacienteExistenteModal = existente;
     pacienteNovoModal = novo;
+    anexosPendentesModal = anexos;
 
     document.getElementById("compExistentePaciente").textContent = existente.paciente || "-";
     document.getElementById("compExistenteOM").textContent = existente.omAbr || "-";
@@ -1812,6 +1644,7 @@ function fecharModalDuplicidade() {
     document.getElementById("modalDuplicidade")?.classList.add("oculto");
     pacienteExistenteModal = null;
     pacienteNovoModal = null;
+    anexosPendentesModal = [];
 }
 
 function abrirModalExcluir(dados) {
@@ -1829,57 +1662,152 @@ function fecharModalExcluir() {
     pacienteExcluirModal = null;
 }
 
-// 7. SALVAMENTO DE DADOS NA PASTA LOCAL
-/**
- * Cria (ou reutiliza) uma subpasta para o paciente e grava dentro dela
- * o "dados.json" e os PDFs originais anexados nesta sessão.
- * @param {string} sufixoPasta - texto extra no nome da pasta, usado para não colidir ao "Salvar Ambos".
- * @param {{avisar?: boolean, atualizarLista?: boolean}} opcoes - permite
- *        salvar em lote (ver MÓDULO 20 — importar backup) sem disparar um
- *        toast e sem revarrer a pasta inteira a cada item importado.
- */
-async function executarSalvamentoBanco(dados, sufixoPasta = "", opcoes = {}) {
-    const { avisar = true, atualizarLista = true } = opcoes;
+function sanitizarNomePasta(texto, alternativo = "Sem nome") {
+    let limpo = String(texto ?? "")
+        .replace(/[\/\\:*?"<>|]/g, "_")
+        .replace(/[\u0000-\u001F\u007F]/g, "")
+        .replace(/\s{2,}/g, " ")
+        .trim()
+        .replace(/[.\s]+$/g, "");
+
+    if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$/i.test(limpo)) {
+        limpo = `_${limpo}`;
+    }
+
+    if (!limpo || limpo === "." || limpo === "..") {
+        limpo = alternativo;
+    }
+
+    return limpo.slice(0, 150).trim().replace(/[.\s]+$/g, "") || alternativo;
+}
+
+function montarNomePastaPaciente(dados, sufixoPasta = "") {
+    const pacienteLimpo = sanitizarNomePasta(dados.paciente, "Paciente");
+
+    const partes = [
+        pacienteLimpo,
+        String(dados.omAbr || "").trim(),
+        String(dados.dataNomeArquivo || "").trim()
+    ].filter(Boolean);
+
+    let nomePasta = partes.join(" - ");
+    if (sufixoPasta) nomePasta += ` ${sufixoPasta}`;
+
+    return sanitizarNomePasta(nomePasta, pacienteLimpo);
+}
+
+async function arquivoExisteNaPasta(pastaHandle, nomeArquivo) {
     try {
-        // Remove caracteres proibidos em nomes de pasta/arquivo do sistema operacional.
-        const pacienteLimpo = dados.paciente.replace(/[\/\\:*?"<>|]/g, "_");
-        let nomePasta = `${pacienteLimpo} - ${dados.omAbr} - ${dados.dataNomeArquivo}`;
-
-        if (sufixoPasta) {
-            nomePasta += ` ${sufixoPasta}`;
-        }
-
-        const pastaHandle = await dirHandleBanco.getDirectoryHandle(nomePasta, { create: true });
-
-        const fileJson = await pastaHandle.getFileHandle("dados.json", { create: true });
-        const writerJson = await fileJson.createWritable();
-        await writerJson.write(JSON.stringify(dados, null, 4));
-        await writerJson.close();
-
-        if (arquivoAgendamentoObj) {
-            const f = await pastaHandle.getFileHandle(`Marcação - ${pacienteLimpo}.pdf`, { create: true });
-            const w = await f.createWritable();
-            await w.write(arquivoAgendamentoObj);
-            await w.close();
-        }
-        if (arquivoSolicitacaoObj) {
-            const f = await pastaHandle.getFileHandle(`Solicitação - ${pacienteLimpo}.pdf`, { create: true });
-            const w = await f.createWritable();
-            await w.write(arquivoSolicitacaoObj);
-            await w.close();
-        }
-
-        if (avisar) mostrarToast("Dados salvos no banco com sucesso!", "sucesso");
-        if (atualizarLista) await atualizarListaPacientesBanco();   // recarrega a lista para incluir o registro recém-salvo
+        await pastaHandle.getFileHandle(nomeArquivo);
         return true;
-    } catch (e) {
-        console.error(e);
-        if (avisar) mostrarToast("Erro ao salvar. Verifique as permissões da pasta.", "erro");
+    } catch {
         return false;
     }
 }
 
-// 8. DISPARADORES DOS BOTÕES PRINCIPAIS
+async function gravarArquivoNaPasta(pastaHandle, nomeArquivo, conteudo) {
+    const jaExistia = await arquivoExisteNaPasta(pastaHandle, nomeArquivo);
+    const fileHandle = await pastaHandle.getFileHandle(nomeArquivo, { create: true });
+    const writer = await fileHandle.createWritable();
+
+    try {
+        await writer.write(conteudo);
+        await writer.close();
+    } catch (erro) {
+        try { await writer.abort(); } catch { }
+        if (!jaExistia) {
+            try { await pastaHandle.removeEntry(nomeArquivo); } catch { }
+        }
+        throw erro;
+    }
+}
+
+async function copiarArquivosDaPasta(pastaOrigem, pastaDestino, ignorar = ["dados.json"], mapearNome = null) {
+    for await (const entrada of pastaOrigem.values()) {
+        if (entrada.kind !== "file") continue;
+        if (ignorar.includes(entrada.name)) continue;
+
+        const nomeDestino = typeof mapearNome === "function" ? mapearNome(entrada.name) : entrada.name;
+        if (await arquivoExisteNaPasta(pastaDestino, nomeDestino)) continue;
+
+        const arquivo = await entrada.getFile();
+        await gravarArquivoNaPasta(pastaDestino, nomeDestino, await arquivo.arrayBuffer());
+    }
+}
+
+function limparCamposInternos(dados) {
+    const copia = { ...dados };
+    for (const chave of Object.keys(copia)) {
+        if (chave.startsWith("_")) delete copia[chave];
+    }
+    return copia;
+}
+
+/* Os PDFs anexados viram dois arquivos com nome padronizado dentro da
+   pasta do paciente. Recebe os arquivos por parâmetro (e não direto das
+   variáveis globais) porque na v1.6.2 existem DUAS telas que salvam
+   paciente: a barra do LME e a nova faixa da página BANCO. */
+function montarAnexosDePDFs(dados, objAgendamento, objSolicitacao) {
+    const pacienteLimpo = sanitizarNomePasta(dados.paciente);
+    const lista = [];
+
+    if (objAgendamento && objAgendamento.bytes) {
+        lista.push({ nome: `Marcação - ${pacienteLimpo}.pdf`, bytes: objAgendamento.bytes });
+    }
+    if (objSolicitacao && objSolicitacao.bytes) {
+        lista.push({ nome: `Solicitação - ${pacienteLimpo}.pdf`, bytes: objSolicitacao.bytes });
+    }
+    return lista;
+}
+
+function anexosDaPaginaLME(dados) {
+    return montarAnexosDePDFs(dados, arquivoAgendamentoObj, arquivoSolicitacaoObj);
+}
+
+async function executarSalvamentoBanco(dados, sufixoPasta = "", opcoes = {}) {
+    const { avisar = true, atualizarLista = true, arquivos = null } = opcoes;
+
+    const nomePasta = montarNomePastaPaciente(dados, sufixoPasta);
+    const anexos = arquivos !== null ? arquivos : anexosDaPaginaLME(dados);
+
+    let pastaHandle;
+
+    try {
+        pastaHandle = await dirHandleBanco.getDirectoryHandle(nomePasta, { create: true });
+    } catch (erro) {
+        console.error("Erro ao criar a pasta do paciente:", erro);
+        if (avisar) mostrarToast(`Não foi possível criar a pasta do paciente (${erro.name || "erro"}).`, "erro");
+        return { ok: false, nomePasta, motivo: `não foi possível criar a pasta (${erro.name || "erro"})` };
+    }
+
+    try {
+        await gravarArquivoNaPasta(pastaHandle, "dados.json", JSON.stringify(limparCamposInternos(dados), null, 4));
+    } catch (erro) {
+        console.error("Erro ao gravar o dados.json:", erro);
+        if (avisar) mostrarToast(`Não foi possível gravar o dados.json (${erro.name || "erro"}).`, "erro");
+        return { ok: false, nomePasta, motivo: `falha ao gravar o dados.json (${erro.name || "erro"})` };
+    }
+
+    const falhas = [];
+    for (const anexo of anexos) {
+        try {
+            await gravarArquivoNaPasta(pastaHandle, anexo.nome, anexo.bytes);
+        } catch (erro) {
+            console.error(`Erro ao gravar "${anexo.nome}":`, erro);
+            falhas.push(`${anexo.nome} (${erro.name || "erro"})`);
+        }
+    }
+
+    if (atualizarLista) await atualizarListaPacientesBanco();
+
+    if (falhas.length > 0) {
+        if (avisar) mostrarToast(`Dados salvos, mas falhou ao gravar: ${falhas.join(", ")}.`, "erro");
+        return { ok: false, nomePasta, motivo: `falha ao gravar ${falhas.join(", ")}` };
+    }
+
+    if (avisar) mostrarToast("Dados salvos no banco com sucesso!", "sucesso");
+    return { ok: true, nomePasta, motivo: "" };
+}
 
 document.getElementById("btnInserirBanco")?.addEventListener("click", async () => {
     if (!dirHandleBanco) {
@@ -1888,17 +1816,14 @@ document.getElementById("btnInserirBanco")?.addEventListener("click", async () =
     }
 
     const dadosNovos = dadosBancoCarregados || extrairDadosCompletos(textoPDF, textoPDFSolicitacao);
-
     if (!dadosNovos || !dadosNovos.paciente) {
         mostrarToast("Anexe os PDFs antes de salvar.", "aviso");
         return;
     }
 
     const existente = buscarPacienteExistentePorNome(dadosNovos.paciente);
-
     if (existente) {
-        // Já existe alguém com esse nome: pede confirmação em vez de sobrescrever direto.
-        abrirModalDuplicidade(existente, dadosNovos);
+        abrirModalDuplicidade(existente, dadosNovos, anexosDaPaginaLME(dadosNovos));
     } else {
         await executarSalvamentoBanco(dadosNovos);
     }
@@ -1918,63 +1843,63 @@ document.getElementById("btnExcluirBanco")?.addEventListener("click", () => {
     abrirModalExcluir(dadosBancoCarregados);
 });
 
-// 9. DELEGAÇÃO DE EVENTOS GLOBAL PARA OS BOTÕES DOS MODAIS
-// Em vez de um listener por botão, um único listener no "document"
-// identifica qual botão foi clicado pelo seu id (delegação de eventos).
 document.addEventListener("click", async (e) => {
     const btn = e.target.closest("button");
     if (!btn) return;
 
-    // Modal Duplicidade - Cancelar
     if (btn.id === "btnModalCancelar") {
         fecharModalDuplicidade();
-    }
-
-    // Modal Duplicidade - Substituir (apaga o registro antigo e grava o novo no lugar)
-    else if (btn.id === "btnModalSubstituir") {
+    } else if (btn.id === "btnModalSubstituir") {
         if (!pacienteExistenteModal || !pacienteNovoModal) return;
 
-        try {
-            if (pacienteExistenteModal._nomePasta) {
-                await dirHandleBanco.removeEntry(pacienteExistenteModal._nomePasta, { recursive: true });
-            }
-
-            const dadosParaSalvar = pacienteNovoModal;
-            fecharModalDuplicidade();
-            await executarSalvamentoBanco(dadosParaSalvar);
-            mostrarToast("Registro antigo substituído com sucesso!", "sucesso");
-        } catch (erro) {
-            console.error("Erro ao substituir paciente:", erro);
-            mostrarToast("Erro ao excluir o paciente antigo para substituição.", "erro");
-        }
-    }
-
-    // Modal Duplicidade - Salvar Ambos (mantém o antigo e cria uma pasta nova com sufixo "(Cópia NNNN)")
-    else if (btn.id === "btnModalSalvarAmbos") {
-        if (!pacienteNovoModal) return;
-
-        const dadosParaSalvar = pacienteNovoModal;
+        const existente = pacienteExistenteModal;
+        const novo = pacienteNovoModal;
+        const anexos = anexosPendentesModal;
         fecharModalDuplicidade();
 
+        const nomePastaNova = montarNomePastaPaciente(novo);
+        const resultado = await executarSalvamentoBanco(novo, "", { avisar: false, atualizarLista: false, arquivos: anexos });
+
+        if (!resultado.ok) {
+            await atualizarListaPacientesBanco();
+            mostrarToast(`Nada foi substituído: ${resultado.motivo}.`, "erro");
+            return;
+        }
+
+        if (existente._nomePasta && existente._nomePasta !== nomePastaNova) {
+            try {
+                const pastaAntiga = await dirHandleBanco.getDirectoryHandle(existente._nomePasta);
+                const pastaNova = await dirHandleBanco.getDirectoryHandle(nomePastaNova);
+                await copiarArquivosDaPasta(pastaAntiga, pastaNova);
+                await dirHandleBanco.removeEntry(existente._nomePasta, { recursive: true });
+            } catch (erro) {
+                console.error("Erro ao remover a pasta antiga:", erro);
+                mostrarToast("Registro novo salvo, mas a pasta antiga não pôde ser apagada.", "aviso");
+                await atualizarListaPacientesBanco();
+                return;
+            }
+        }
+
+        await atualizarListaPacientesBanco();
+        mostrarToast("Registro antigo substituído com sucesso!", "sucesso");
+    } else if (btn.id === "btnModalSalvarAmbos") {
+        if (!pacienteNovoModal) return;
+        const dadosParaSalvar = pacienteNovoModal;
+        const anexos = anexosPendentesModal;
+        fecharModalDuplicidade();
         const idUnico = new Date().getTime().toString().slice(-4);
-        await executarSalvamentoBanco(dadosParaSalvar, `(Cópia ${idUnico})`);
-    }
-
-    // Modal Excluir - Cancelar
-    else if (btn.id === "btnModalCancelarExclusao") {
+        await executarSalvamentoBanco(dadosParaSalvar, `(Cópia ${idUnico})`, { arquivos: anexos });
+    } else if (btn.id === "btnModalCancelarExclusao") {
         fecharModalExcluir();
-    }
-
-    // Modal Excluir - Confirmar Exclusão
-    else if (btn.id === "btnModalConfirmarExclusao") {
+    } else if (btn.id === "btnModalConfirmarExclusao") {
         if (!pacienteExcluirModal || !pacienteExcluirModal._nomePasta) return;
 
         try {
             await dirHandleBanco.removeEntry(pacienteExcluirModal._nomePasta, { recursive: true });
-
             fecharModalExcluir();
             mostrarToast("Registro excluído com sucesso!", "sucesso");
 
+            if (typeof fecharRegistroAberto === "function") fecharRegistroAberto();
             dadosBancoCarregados = null;
 
             const inputPesquisa = document.getElementById("inputPesquisaBanco");
@@ -1982,20 +1907,16 @@ document.addEventListener("click", async (e) => {
 
             await atualizarListaPacientesBanco();
             atualizarPainelLME();
-
         } catch (erro) {
             console.error("Erro ao excluir pasta:", erro);
             mostrarToast("Erro ao excluir o registro do computador.", "erro");
         }
     }
 });
+
 /* ============================================================
    MÓDULO 15 — PESQUISA E CÓPIA AUTOMÁTICA (PÁGINA EXCEL)
-   O que este arquivo faz: liga a busca de paciente já salvo à linha
-   do Excel, e copia essa linha para a área de transferência já
-   separada por TAB (para colar direto nas colunas da planilha).
    ============================================================ */
-
 document.getElementById("inputPesquisaExcel")?.addEventListener("input", (e) => {
     const valorDigitado = e.target.value;
 
@@ -2019,12 +1940,7 @@ document.getElementById("copiarExcelBtn")?.addEventListener("click", async () =>
     }
 
     textoVisual = formatarDataAno2Digitos(textoVisual);
-
-    // Separa exatamente as 11 colunas divididas pelos hífens principais.
     let partes = textoVisual.split(/\s*-\s*/);
-
-    // Junta as colunas com TAB: ao colar no Excel, cada parte cai em
-    // uma célula diferente automaticamente.
     const textoParaExcel = partes.join("\t");
 
     try {
@@ -2034,33 +1950,30 @@ document.getElementById("copiarExcelBtn")?.addEventListener("click", async () =>
         mostrarToast("Não foi possível copiar o texto.", "erro");
     }
 });
+
 /* ============================================================
    MÓDULO 16 — REVELAÇÃO SUAVE DA PÁGINA (ANTI-FLICKER)
-   O que este bloco faz: espera o HTML terminar de montar e então
-   libera a opacidade do body (ver MÓDULO 1 do style.css), evitando
-   o "flash" de conteúdo desalinhado que apareceria por uma fração de
-   segundo antes do CSS/JS aplicarem os estados iniciais (aba ativa,
-   dropzones recolhidas, etc.).
    ============================================================ */
-
 window.addEventListener("DOMContentLoaded", () => {
     requestAnimationFrame(() => {
         document.body.classList.add("carregado");
     });
 });
 
-
 /* ============================================================
    MÓDULO 17 — ATALHOS DE TECLADO
-   O que este bloco faz: acelera o uso do sistema para quem prefere
-   teclado a mouse.
-     • Alt + 1..4      -> troca de aba (LME / DOC / EXCEL / BANCO)
-     • Ctrl + Enter    -> clica em "GERAR DIEx" (só na página LME)
-     • Ctrl+Shift + C  -> clica em "COPIAR TEXTO" (só na página LME)
    ============================================================ */
-
 document.addEventListener("keydown", (e) => {
-    // Alt+1..4: troca de aba, na mesma ordem mostrada no rodapé.
+    // O ESC fecha o paciente aberto no banco. A checagem é feita pelo
+    // registroAbertoPasta (quem sabe se há alguém aberto) — antes olhava
+    // uma classe "foco-registro" no <body> que deixou de existir, então
+    // na prática o atalho estava morto.
+    if (e.key === "Escape" && registroAbertoPasta) {
+        e.preventDefault();
+        if (podeDescartarEdicaoAberta()) fecharRegistroAberto();
+        return;
+    }
+
     if (e.altKey && ["1", "2", "3", "4"].includes(e.key)) {
         e.preventDefault();
         const nomeAba = ordemPaginas[parseInt(e.key, 10) - 1];
@@ -2069,38 +1982,21 @@ document.addEventListener("keydown", (e) => {
         return;
     }
 
-    // Ctrl+Enter: gera o DIEx sem precisar tirar a mão do teclado.
     if (e.ctrlKey && e.key === "Enter" && abaAtualNome === "lme") {
         e.preventDefault();
         document.getElementById("gerarBtn")?.click();
         return;
     }
 
-    // Ctrl+Shift+C: copia o resultado gerado (não conflita com o
-    // Ctrl+C normal de copiar texto selecionado).
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "c" && abaAtualNome === "lme") {
         e.preventDefault();
         document.getElementById("copiarBtn")?.click();
     }
 });
 
-
 /* ============================================================
    MÓDULO 18 — NOVA CONSULTA (BOTÃO "LIMPAR" DAS DROPZONES)
-   O que este bloco faz: em cada página (LME, EXCEL e DOC) existe um
-   botão "LIMPAR" ao lado da barra "ANEXAR PDF'S" — ele zera os PDFs
-   anexados e os campos daquela página, sem precisar recarregar tudo,
-   para começar uma nova consulta do zero.
-
-   O "LIMPAR" é uma caixa independente, irmã da barra (e não um filho
-   dela) — ver ".linha-barra-dropzone" no MÓDULO 4 do style.css. Por
-   isso o clique aqui não tem como chegar ao listener que recolhe a
-   barra, e nenhum "stopPropagation" é necessário. Ele só aparece com a
-   dropzone aberta: ao recolher, encolhe até zero e a barra cresce
-   ocupando o espaço dele.
    ============================================================ */
-
-/** Volta os cards de "Dados Extraídos" da página LME para o estado vazio ("-"). */
 function limparPainelLME() {
     const ids = [
         "dbgPaciente", "dbgMedico", "dbgDataHora", "dbgLocal",
@@ -2112,16 +2008,13 @@ function limparPainelLME() {
     });
 }
 
-// Botão "LIMPAR" da página LME.
 document.getElementById("btnLimparLme")?.addEventListener("click", () => {
-    // Zera o estado global relacionado à página LME.
     textoPDF = "";
     textoPDFSolicitacao = "";
     arquivoAgendamentoObj = null;
     arquivoSolicitacaoObj = null;
     dadosBancoCarregados = null;
 
-    // Limpa os inputs de arquivo (permite reanexar o mesmo PDF em seguida).
     pdfFile.value = "";
     pdfSolicitacao.value = "";
 
@@ -2137,12 +2030,11 @@ document.getElementById("btnLimparLme")?.addEventListener("click", () => {
 
     const campoResultado = document.getElementById("resultado");
     if (campoResultado) campoResultado.innerHTML = "";
-    localStorage.removeItem("automed_rascunhoResultado");   // ver MÓDULO 21, mais abaixo
+    localStorage.removeItem("automed_rascunhoResultado");
 
     mostrarToast("Campos limpos. Pronto para uma nova consulta.", "sucesso");
 });
 
-// Botão "LIMPAR" da página EXCEL.
 document.getElementById("btnLimparExcel")?.addEventListener("click", () => {
     textoPDFExcelAgendamento = "";
     textoPDFExcelSolicitacao = "";
@@ -2159,12 +2051,10 @@ document.getElementById("btnLimparExcel")?.addEventListener("click", () => {
     const inputPesquisaExcel = document.getElementById("inputPesquisaExcel");
     if (inputPesquisaExcel) inputPesquisaExcel.value = "";
 
-    atualizarLinhaExcel();   // com tudo zerado, isso deixa o campo de resultado vazio
-
+    atualizarLinhaExcel();
     mostrarToast("Campos limpos. Pronto para uma nova consulta.", "sucesso");
 });
 
-// Botão "LIMPAR" da página DOC (limpa os dois modos: LME Scan e Comissão de Ética).
 document.getElementById("btnLimparDoc")?.addEventListener("click", () => {
     textoConsultaDoc = "";
     textoSolicitacaoDoc = "";
@@ -2203,71 +2093,65 @@ document.getElementById("btnLimparDoc")?.addEventListener("click", () => {
     mostrarToast("Campos limpos. Pronto para uma nova consulta.", "sucesso");
 });
 
-
 /* ============================================================
    MÓDULO 19 — ESTATÍSTICAS DO BANCO DE DADOS (PÁGINA BANCO)
-   O que este bloco faz: depois que a pasta do banco é lida (ver
-   atualizarListaPacientesBanco, MÓDULO 14), calcula um resumo rápido
-   — total de pacientes, OMs e especialidades mais frequentes — e
-   mostra na página BANCO.
    ============================================================ */
+function atualizarPainelInicialBanco() {
+    const conectado = !!dirHandleBanco;
 
-/** Devolve as "n" chaves mais frequentes de um Map(chave -> quantidade), já formatadas como texto. */
-function principaisOcorrencias(mapaContagem, n = 3) {
-    return [...mapaContagem.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, n)
-        .map(([nome, quantidade]) => `${nome} (${quantidade})`)
-        .join(", ");
+    const cartaoConexao = document.getElementById("cartaoStatusConexao");
+    const textoConexao = document.getElementById("statusConexaoTopo");
+    const acaoConectar = document.getElementById("acaoConectarTopo");
+    const btnReconectar = document.getElementById("btnReconectarBanco");
+
+    if (textoConexao) textoConexao.textContent = conectado ? "CONECTADO" : "DESCONECTADO";
+    cartaoConexao?.classList.toggle("conectado", conectado);
+
+    acaoConectar?.classList.toggle("recolhido", conectado);
+    btnReconectar?.classList.toggle("oculto", !conectado);
+
+    // Com o banco conectado a lista ganha altura fixa (vira uma caixa com
+    // rolagem própria); qual altura exatamente, quem decide é
+    // ajustarAlturaListaRegistros, medindo o que sobra até o rodapé.
+    document.getElementById("listaRegistrosBanco")?.classList.toggle("conectado", conectado);
+    ajustarAlturaListaRegistros();
+
+    let concluidos = 0;
+    let pendentes = 0;
+
+    for (const dados of mapaPacientesBanco.values()) {
+        if (progressoChecklist(dados).completo) concluidos++;
+        else pendentes++;
+    }
+
+    const total = document.getElementById("statusTotalTopo");
+    const elPendentes = document.getElementById("statusPendentesTopo");
+    const elConcluidos = document.getElementById("statusConcluidosTopo");
+
+    if (total) total.textContent = conectado ? mapaPacientesBanco.size : "—";
+    if (elPendentes) elPendentes.textContent = conectado ? pendentes : "—";
+    if (elConcluidos) elConcluidos.textContent = conectado ? concluidos : "—";
 }
 
 function atualizarEstatisticasBanco() {
-    const painel = document.getElementById("estatisticasBanco");
-    if (!painel) return;
-
-    const total = mapaPacientesBanco.size;
-    if (total === 0) {
-        painel.classList.add("oculto");
-        return;
-    }
-
-    const contagemOM = new Map();
-    const contagemEspecialidade = new Map();
-
-    for (const dados of mapaPacientesBanco.values()) {
-        const om = dados.omAbr || "Não informado";
-        const especialidade = dados.especialidade || "Não informado";
-
-        contagemOM.set(om, (contagemOM.get(om) || 0) + 1);
-        contagemEspecialidade.set(especialidade, (contagemEspecialidade.get(especialidade) || 0) + 1);
-    }
-
-    document.getElementById("statTotalPacientes").textContent = total;
-    document.getElementById("statTopOMs").textContent = principaisOcorrencias(contagemOM) || "-";
-    document.getElementById("statTopEspecialidades").textContent = principaisOcorrencias(contagemEspecialidade) || "-";
-
-    painel.classList.remove("oculto");
+    // O antigo cartão RESUMO DO BANCO (totais de OMs e especialidades)
+    // foi retirado da página na v1.6.2 para liberar altura: a meta agora
+    // é que a página BANCO caiba inteira na tela. O que interessa de
+    // relance — conectado, total, pendentes e concluídos — continua nos
+    // cartões do topo, montados por atualizarPainelInicialBanco.
+    atualizarPainelInicialBanco();
 }
-
 
 /* ============================================================
    MÓDULO 20 — BACKUP DO BANCO DE DADOS (EXPORTAR / IMPORTAR)
-   O que este bloco faz: junta todos os "dados.json" das subpastas do
-   banco em um único arquivo de backup (.json) para download, e faz o
-   caminho inverso — lê um backup e recria as pastas que ainda não
-   existem no banco conectado.
    ============================================================ */
-
 document.getElementById("btnExportarBackup")?.addEventListener("click", () => {
     if (!dirHandleBanco || mapaPacientesBanco.size === 0) {
         mostrarToast("Conecte o banco e certifique-se de que há pacientes salvos.", "aviso");
         return;
     }
 
-    // Remove o campo interno "_nomePasta" (é só um detalhe da implementação
-    // local; não faz sentido guardá-lo dentro do arquivo de backup).
     const todosOsDados = [...mapaPacientesBanco.values()].map(({ _nomePasta, ...resto }) => resto);
-
     const blob = new Blob([JSON.stringify(todosOsDados, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -2307,20 +2191,16 @@ document.getElementById("inputImportarBackup")?.addEventListener("change", async
         let importados = 0;
         let ignorados = 0;
 
-        // Salva cada registro sem disparar um toast por item nem
-        // revarrer a pasta inteira a cada iteração (ver a assinatura
-        // estendida de executarSalvamentoBanco, no MÓDULO 14) —
-        // a lista é atualizada e o aviso final aparece uma única vez.
         for (const dados of lista) {
             if (!dados || !dados.paciente) { ignorados++; continue; }
 
             if (buscarPacienteExistentePorNome(dados.paciente)) {
-                ignorados++;   // já existe um registro com esse nome: não sobrescreve
+                ignorados++;
                 continue;
             }
 
-            const sucesso = await executarSalvamentoBanco(dados, "", { avisar: false, atualizarLista: false });
-            if (sucesso) importados++; else ignorados++;
+            const resultado = await executarSalvamentoBanco(dados, "", { avisar: false, atualizarLista: false, arquivos: [] });
+            if (resultado.ok) importados++; else ignorados++;
         }
 
         await atualizarListaPacientesBanco();
@@ -2333,15 +2213,9 @@ document.getElementById("inputImportarBackup")?.addEventListener("change", async
     }
 });
 
-
 /* ============================================================
    MÓDULO 21 — RASCUNHO AUTOMÁTICO DO RESULTADO GERADO (PÁGINA LME)
-   O que este bloco faz: salva automaticamente, a cada geração ou
-   edição manual, uma cópia do texto do DIEx no localStorage. Se o
-   navegador fechar ou recarregar por acidente antes de copiar o
-   texto, ele é recuperado sozinho na próxima vez que a página abrir.
    ============================================================ */
-
 const campoResultadoLme = document.getElementById("resultado");
 
 if (campoResultadoLme) {
@@ -2349,9 +2223,7 @@ if (campoResultadoLme) {
         localStorage.setItem("automed_rascunhoResultado", campoResultadoLme.innerHTML);
     });
 
-    // Também salva logo após o botão "GERAR DIEx" preencher o campo.
     document.getElementById("gerarBtn")?.addEventListener("click", () => {
-        // Pequeno atraso para rodar depois que o MÓDULO 11 já escreveu o resultado.
         setTimeout(() => {
             if (campoResultadoLme.innerHTML.trim()) {
                 localStorage.setItem("automed_rascunhoResultado", campoResultadoLme.innerHTML);
@@ -2359,10 +2231,1446 @@ if (campoResultadoLme) {
         }, 0);
     });
 
-    // Ao carregar a página, recupera um rascunho não copiado (se existir).
     const rascunhoSalvo = localStorage.getItem("automed_rascunhoResultado");
     if (rascunhoSalvo && rascunhoSalvo.trim() && !campoResultadoLme.innerHTML.trim()) {
         campoResultadoLme.innerHTML = rascunhoSalvo;
-        mostrarToast("Um rascunho não copiado foi recuperado.", "aviso");
     }
 }
+
+/* ============================================================
+   MÓDULO 22 — VISUALIZADOR DE REGISTROS DO BANCO (PÁGINA BANCO)
+   ============================================================ */
+const LOTE_REGISTROS = 50;
+
+let mapaRegistrosPorPasta = new Map();
+let filtroRegistros = "";
+let quantidadeVisivelRegistros = LOTE_REGISTROS;
+
+let registroAbertoPasta = null;
+let registroReabrirPasta = null;
+let registroTemAlteracao = false;
+let registroAvisouDescarte = false;
+let anexosPendentesRegistro = [];
+let urlsTemporariasRegistro = [];
+let posicaoRolagemAntesDoFoco = null;
+let posicaoScrollListaAntesDoFoco = null;
+
+const CAMPOS_EDITAVEIS_REGISTRO = [
+    { chave: "paciente",      rotulo: "Paciente",           largo: true },
+    { chave: "medico",        rotulo: "Médico",             lista: "listaMedicosRegistro" },
+    { chave: "especialidade", rotulo: "Especialidade",      lista: "listaEspecialidadesRegistro" },
+    { chave: "data",          rotulo: "Data da consulta",   dica: "dd/mm/aaaa" },
+    { chave: "horario",       rotulo: "Horário",            dica: "hh:mm" },
+    { chave: "local",         rotulo: "Local",              largo: true },
+    { chave: "om",            rotulo: "OM solicitante",     lista: "listaOMsRegistro", largo: true },
+    { chave: "omAbr",         rotulo: "OM abreviada",       lista: "listaOMsAbrRegistro" },
+    { chave: "tipoOM",        rotulo: "Tipo de OM",         lista: "listaTiposOMRegistro" },
+    { chave: "numeroDIEx",    rotulo: "Nº do DIEx" },
+    { chave: "dataDIEx",      rotulo: "Data do DIEx",       dica: "dd/mm/aaaa" }
+];
+
+/* ------------------------------------------------------------------
+   As etapas de DIEx levam "emFila: true" (v1.6.2): elas se revelam uma
+   de cada vez, na ordem em que estão aqui — AGENDAMENTO libera REMESSA
+   PARA OM, que libera ENVIO PARA S2. Enquanto trancada, a etiqueta não
+   some do DOM: ela encolhe (classe .etapa-trancada no style.css), e é
+   por isso que aparecer e desaparecer tem transição.
+   EXCEL e DOC não têm "emFila" e continuam sempre visíveis — a fila é
+   só dos DIEx. A contagem do cabeçalho (x/5) segue somando TODAS as
+   etapas, inclusive as ainda trancadas: elas continuam sendo trabalho
+   a fazer, apenas não estão na vez.
+   ------------------------------------------------------------------ */
+const ITENS_CHECKLIST = [
+    { chave: "diexAgendamento", rotulo: "DIEx de Agendamento",    dica: "LME — modelo de agendamento", pagina: "lme", modelo: "agendamento", emFila: true },
+    { chave: "diexRemessaOM",   rotulo: "DIEx de Remessa para OM", dica: "LME — modelo de remessa",     pagina: "lme", modelo: "remessa",     emFila: true },
+    { chave: "diexS2",          rotulo: "DIEx de Envio para S2",   dica: "LME — modelo da S2",          pagina: "lme", modelo: "s2",          emFila: true },
+    { chave: "excel",           rotulo: "Linha do Excel",          dica: "Linha copiada para a planilha", pagina: "excel" },
+    { chave: "doc",             rotulo: "PDF renomeado (DOC)",     dica: "Documento renomeado e salvo",   pagina: "doc" }
+];
+
+const ITENS_CHECKLIST_EM_FILA = ITENS_CHECKLIST.filter(item => item.emFila);
+
+/* Devolve as etapas que devem estar à mostra para este paciente.
+   Uma etapa em fila aparece quando todas as anteriores da fila já
+   estiverem feitas — ou quando ela mesma já estiver feita, para que
+   desmarcar uma etapa antiga não faça sumir uma que já foi cumprida. */
+function etapasVisiveisDoChecklist(dados) {
+    const checklist = lerChecklist(dados);
+    const visiveis = new Set(
+        ITENS_CHECKLIST.filter(item => !item.emFila).map(item => item.chave)
+    );
+
+    let anterioresFeitas = true;
+    for (const item of ITENS_CHECKLIST_EM_FILA) {
+        if (anterioresFeitas || checklist[item.chave]) visiveis.add(item.chave);
+        if (!checklist[item.chave]) anterioresFeitas = false;
+    }
+
+    return visiveis;
+}
+
+function lerChecklist(dados) {
+    const guardado = (dados && typeof dados.checklist === "object" && dados.checklist) ? dados.checklist : {};
+    const completo = {};
+
+    for (const item of ITENS_CHECKLIST) {
+        completo[item.chave] = guardado[item.chave] === true;
+    }
+    return completo;
+}
+
+function progressoChecklist(dados) {
+    const checklist = lerChecklist(dados);
+    const feitos = ITENS_CHECKLIST.filter(item => checklist[item.chave]).length;
+
+    return {
+        feitos,
+        total: ITENS_CHECKLIST.length,
+        completo: feitos === ITENS_CHECKLIST.length,
+        vazio: feitos === 0
+    };
+}
+
+async function salvarChecklistNoDisco(dados) {
+    if (!dirHandleBanco) {
+        mostrarToast("Conecte a pasta do banco para registrar o andamento.", "aviso");
+        return false;
+    }
+
+    try {
+        const pasta = await dirHandleBanco.getDirectoryHandle(dados._nomePasta, { create: true });
+        await gravarArquivoNaPasta(pasta, "dados.json", JSON.stringify(limparCamposInternos(dados), null, 4));
+        return true;
+    } catch (erro) {
+        console.error("Erro ao gravar o checklist:", erro);
+        mostrarToast(`Não foi possível gravar o andamento (${erro.name || "erro"}).`, "erro");
+        return false;
+    }
+}
+
+async function definirItemChecklist(dados, chave, feito) {
+    const checklist = lerChecklist(dados);
+    checklist[chave] = feito === true;
+    dados.checklist = checklist;
+
+    const gravou = await salvarChecklistNoDisco(dados);
+    if (!gravou) {
+        checklist[chave] = !feito;
+        dados.checklist = checklist;
+    }
+
+    atualizarProgressoNaLista(dados);
+    atualizarPainelInicialBanco();
+    return checklist[chave];
+}
+
+function preencherListaSugestao(idDatalist, valores) {
+    const datalist = document.getElementById(idDatalist);
+    if (!datalist) return;
+
+    datalist.innerHTML = "";
+    for (const valor of [...new Set(valores)].sort()) {
+        if (!valor) continue;
+        const option = document.createElement("option");
+        option.value = valor;
+        datalist.appendChild(option);
+    }
+}
+
+function prepararListasDeSugestaoRegistros() {
+    preencherListaSugestao("listaMedicosRegistro", Object.values(medicosConhecidos));
+    preencherListaSugestao("listaOMsRegistro", Object.keys(omsConhecidas));
+    preencherListaSugestao("listaOMsAbrRegistro", Object.values(omsConhecidas));
+    preencherListaSugestao("listaTiposOMRegistro", Object.keys(tratamentoPorTipoOM));
+    preencherListaSugestao(
+        "listaEspecialidadesRegistro",
+        especialidadesConhecidas.map(esp => esp.toLowerCase().replace(/\b\w/g, letra => letra.toUpperCase()))
+    );
+}
+
+function normalizarParaBusca(texto) {
+    return (texto || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toUpperCase();
+}
+
+function textoBuscavelDoRegistro(dados) {
+    return normalizarParaBusca([
+        dados.paciente, dados.omAbr, dados.om, dados.especialidade,
+        dados.medico, dados.data, dados.dataMilitar, dados.numeroDIEx
+    ].join(" "));
+}
+
+function registrosFiltrados() {
+    const termos = normalizarParaBusca(filtroRegistros).split(/\s+/).filter(Boolean);
+
+    const lista = [...mapaRegistrosPorPasta.values()].filter(dados => {
+        if (termos.length === 0) return true;
+        const alvo = textoBuscavelDoRegistro(dados);
+        return termos.every(termo => alvo.includes(termo));
+    });
+
+    return lista.sort((a, b) =>
+        (a.paciente || "").localeCompare(b.paciente || "", "pt-BR", { sensitivity: "base" })
+    );
+}
+
+function criarColunaRegistro(texto, classeExtra) {
+    const span = document.createElement("span");
+    span.className = "registro-col " + classeExtra;
+    span.textContent = texto || "-";
+    return span;
+}
+
+function aplicarProgressoNaColuna(span, dados) {
+    const { feitos, total, completo, vazio } = progressoChecklist(dados);
+
+    span.textContent = `${feitos}/${total}`;
+    span.classList.remove("pendente", "andamento", "completo");
+    span.classList.add(completo ? "completo" : vazio ? "pendente" : "andamento");
+    span.title = completo
+        ? "Todas as etapas deste paciente estão concluídas."
+        : `Faltam ${total - feitos} etapa(s) para concluir este paciente.`;
+}
+
+function atualizarProgressoNaLista(dados) {
+    const item = document.querySelector(`.registro-item[data-pasta="${CSS.escape(dados._nomePasta)}"]`);
+    const span = item?.querySelector(".registro-col-progresso");
+    if (span) aplicarProgressoNaColuna(span, dados);
+}
+
+function criarLinhaRegistro(dados) {
+    const item = document.createElement("div");
+    item.className = "registro-item";
+    item.dataset.pasta = dados._nomePasta;
+
+    const cabecalho = document.createElement("button");
+    cabecalho.type = "button";
+    cabecalho.className = "registro-cabecalho";
+    cabecalho.title = "Clique para abrir os dados deste paciente";
+
+    cabecalho.appendChild(criarColunaRegistro(dados.paciente, "registro-col-paciente"));
+    cabecalho.appendChild(criarColunaRegistro(dados.omAbr, "registro-col-secundaria"));
+    cabecalho.appendChild(criarColunaRegistro(dados.data, "registro-col-secundaria"));
+    cabecalho.appendChild(criarColunaRegistro(dados.especialidade, "registro-col-secundaria"));
+
+    const progresso = document.createElement("span");
+    progresso.className = "registro-col registro-col-progresso";
+    aplicarProgressoNaColuna(progresso, dados);
+    cabecalho.appendChild(progresso);
+
+    const dicaFechar = document.createElement("span");
+    dicaFechar.className = "registro-dica-fechar";
+    dicaFechar.textContent = "clique para voltar à lista";
+    cabecalho.appendChild(dicaFechar);
+
+    const seta = document.createElement("span");
+    seta.className = "registro-seta";
+    seta.textContent = "▼";
+    cabecalho.appendChild(seta);
+
+    cabecalho.addEventListener("click", () => alternarRegistro(item));
+
+    item.appendChild(cabecalho);
+    return item;
+}
+
+function mostrarMensagemNaLista(container, mensagem) {
+    const aviso = document.createElement("div");
+    aviso.className = "lista-registros-vazia";
+    aviso.textContent = mensagem;
+    container.appendChild(aviso);
+}
+
+function renderizarRegistrosBanco() {
+    const container = document.getElementById("listaRegistrosBanco");
+    if (!container) return;
+
+    mapaRegistrosPorPasta = new Map();
+    for (const dados of mapaPacientesBanco.values()) {
+        if (dados && dados._nomePasta) mapaRegistrosPorPasta.set(dados._nomePasta, dados);
+    }
+
+    container.innerHTML = "";
+    ativarModoFoco(false);
+    registroAbertoPasta = null;
+    registroTemAlteracao = false;
+    registroAvisouDescarte = false;
+    anexosPendentesRegistro = [];
+    liberarUrlsTemporarias();
+
+    const contador = document.getElementById("contadorRegistros");
+    const btnCarregarMais = document.getElementById("btnCarregarMaisRegistros");
+
+    if (!dirHandleBanco) {
+        mostrarMensagemNaLista(container, "Conecte a pasta do banco para ver os registros salvos.");
+        if (contador) contador.textContent = "";
+        btnCarregarMais?.classList.add("oculto");
+        return;
+    }
+
+    const encontrados = registrosFiltrados();
+    const visiveis = encontrados.slice(0, quantidadeVisivelRegistros);
+
+    if (encontrados.length === 0) {
+        mostrarMensagemNaLista(
+            container,
+            filtroRegistros
+                ? "Nenhum registro encontrado para esta pesquisa."
+                : "Nenhum paciente salvo nesta pasta ainda."
+        );
+    } else {
+        for (const dados of visiveis) {
+            container.appendChild(criarLinhaRegistro(dados));
+        }
+    }
+
+    if (contador) {
+        contador.textContent = encontrados.length === 0
+            ? ""
+            : `Mostrando ${visiveis.length} de ${encontrados.length} registro(s).`;
+    }
+
+    if (btnCarregarMais) {
+        btnCarregarMais.classList.toggle("oculto", visiveis.length >= encontrados.length);
+    }
+
+    if (registroReabrirPasta) {
+        const item = container.querySelector(`.registro-item[data-pasta="${CSS.escape(registroReabrirPasta)}"]`);
+        registroReabrirPasta = null;
+        if (item) abrirRegistro(item);
+    }
+
+    ajustarAlturaListaRegistros();
+}
+
+function preferirMenosMovimento() {
+    return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+}
+
+function abrirSanfona(el) {
+    if (!el) return;
+    clearTimeout(el._timerSanfona);
+
+    if (preferirMenosMovimento()) {
+        el.style.maxHeight = "";
+        el.style.opacity = "";
+        return;
+    }
+
+    el.classList.remove("sanfona-fechada", "sanfona-animando");
+    el.style.maxHeight = "none";
+    el.style.overflow = "visible";
+    const alturaFinal = el.scrollHeight;
+
+    el.style.maxHeight = "0px";
+    el.style.overflow = "hidden";
+    el.classList.add("sanfona-fechada", "sanfona-animando");
+
+    void el.offsetHeight;
+
+    requestAnimationFrame(() => {
+        el.classList.remove("sanfona-fechada");
+        el.style.maxHeight = `${alturaFinal}px`;
+    });
+
+    el._timerSanfona = setTimeout(() => {
+        clearTimeout(el._timerSanfona);
+        el.style.maxHeight = "";
+        el.style.overflow = "";
+        el.classList.remove("sanfona-animando");
+    }, 300);
+}
+
+function sincronizarSanfona(el) {
+    if (!el) return;
+    if (el.classList.contains("sanfona-animando")) {
+        el.style.maxHeight = `${el.scrollHeight}px`;
+    }
+    // O conteúdo do cartão mudou de tamanho (anexo novo, arquivos que
+    // acabaram de ser lidos): a caixa em modo foco acompanha.
+    ajustarAlturaListaRegistros();
+}
+
+function fecharSanfona(el, aoTerminar) {
+    const concluir = () => { if (typeof aoTerminar === "function") aoTerminar(); };
+    if (!el) { concluir(); return; }
+
+    clearTimeout(el._timerSanfona);
+
+    if (preferirMenosMovimento()) {
+        concluir();
+        return;
+    }
+
+    const alturaAtual = el.offsetHeight;
+    el.classList.remove("sanfona-fechada", "sanfona-animando");
+    el.style.maxHeight = `${alturaAtual}px`;
+    el.style.overflow = "hidden";
+
+    void el.offsetHeight;
+
+    el.classList.add("sanfona-animando");
+
+    requestAnimationFrame(() => {
+        el.classList.add("sanfona-fechada");
+        el.style.maxHeight = "0px";
+    });
+
+    el._timerSanfona = setTimeout(() => {
+        el.classList.remove("sanfona-animando", "sanfona-fechada");
+        el.style.maxHeight = "";
+        el.style.overflow = "";
+        concluir();
+    }, 240);
+}
+
+function liberarUrlsTemporarias() {
+    for (const url of urlsTemporariasRegistro) {
+        try { URL.revokeObjectURL(url); } catch { }
+    }
+    urlsTemporariasRegistro = [];
+}
+
+function podeDescartarEdicaoAberta() {
+    if (!registroTemAlteracao) return true;
+
+    if (!registroAvisouDescarte) {
+        registroAvisouDescarte = true;
+        mostrarToast("Há alterações não salvas neste registro. Clique de novo para descartá-las.", "aviso");
+        return false;
+    }
+    return true;
+}
+
+/* ==================================================================
+   MODO FOCO ANIMADO (v1.6.2)
+   ------------------------------------------------------------------
+   Abrir um paciente esconde os outros; fechar traz todos de volta. O
+   que mudou na v1.6.2 é COMO isso acontece: antes as outras linhas
+   davam um corte seco (display: none), o que deixava a caixa com um
+   vazio verde e denunciava que existe um "modo foco" por baixo. Agora
+   elas encolhem e voltam a crescer na mesma sanfona do corpo do
+   paciente — abrir parece afastar a lista, fechar parece trazê-la de
+   volta, e no fim o usuário só vê o banco de sempre.
+
+   Todas as linhas escondidas têm exatamente a mesma altura (só o
+   cabeçalho: o corpo pertence a quem está aberto), então basta medir
+   UM cabeçalho para saber a altura de destino de todas — daí
+   alturaDeUmaLinhaDoBanco.
+   ================================================================== */
+const DURACAO_FOCO_MS = 320;
+
+function alturaDeUmaLinhaDoBanco(lista) {
+    const cabecalho = lista.querySelector(".registro-cabecalho");
+    return cabecalho ? cabecalho.offsetHeight : 40;
+}
+
+function limparAnimacaoDeFoco(item) {
+    clearTimeout(item._timerFoco);
+    item.classList.remove("registro-item-animando", "registro-item-colapsado");
+    item.style.maxHeight = "";
+}
+
+function esconderIrmaosDoFoco(lista) {
+    const irmaos = [...lista.children].filter(el =>
+        el.classList.contains("registro-item") && !el.classList.contains("aberto")
+    );
+
+    for (const item of irmaos) {
+        clearTimeout(item._timerFoco);
+
+        if (preferirMenosMovimento()) {
+            item.classList.remove("registro-item-animando");
+            item.classList.add("registro-item-colapsado");
+            item.style.maxHeight = "";
+            continue;
+        }
+
+        // Já colapsado (trocou de paciente sem fechar): nada a animar.
+        if (item.classList.contains("registro-item-colapsado")) continue;
+
+        item.style.maxHeight = `${item.offsetHeight}px`;
+        item.classList.add("registro-item-animando");
+        void item.offsetHeight;
+
+        requestAnimationFrame(() => {
+            item.classList.add("registro-item-colapsado");
+            item.style.maxHeight = "0px";
+        });
+
+        item._timerFoco = setTimeout(() => {
+            item.classList.remove("registro-item-animando");
+            item.style.maxHeight = "";
+        }, DURACAO_FOCO_MS);
+    }
+}
+
+function revelarIrmaosDoFoco(lista) {
+    const colapsados = [...lista.children].filter(el =>
+        el.classList.contains("registro-item-colapsado")
+    );
+    if (colapsados.length === 0) return false;
+
+    if (preferirMenosMovimento()) {
+        colapsados.forEach(limparAnimacaoDeFoco);
+        return false;
+    }
+
+    const alturaAlvo = alturaDeUmaLinhaDoBanco(lista);
+
+    for (const item of colapsados) {
+        clearTimeout(item._timerFoco);
+
+        item.classList.add("registro-item-animando");
+        item.style.maxHeight = "0px";
+        void item.offsetHeight;
+
+        requestAnimationFrame(() => {
+            item.classList.remove("registro-item-colapsado");
+            item.style.maxHeight = `${alturaAlvo}px`;
+        });
+
+        item._timerFoco = setTimeout(() => {
+            item.classList.remove("registro-item-animando");
+            item.style.maxHeight = "";
+        }, DURACAO_FOCO_MS);
+    }
+
+    return true;
+}
+
+/* Enquanto as linhas voltam a crescer, a altura útil da caixa muda a
+   cada quadro e o navegador vai grudando a rolagem no fim do conteúdo.
+   Reafirmar a posição salva em todo quadro faz a lista reaparecer
+   exatamente onde estava, em vez de dar um pulo no último quadro. */
+function segurarRolagemDaLista(lista, alvo, duracao) {
+    const inicio = performance.now();
+
+    function passo() {
+        lista.scrollTop = alvo;
+        if (performance.now() - inicio < duracao) requestAnimationFrame(passo);
+    }
+
+    requestAnimationFrame(passo);
+}
+
+function ativarModoFoco(ativo) {
+    const lista = document.getElementById("listaRegistrosBanco");
+    if (!lista) return;
+
+    if (ativo) {
+        // Guarda onde a rolagem da lista estava antes de abrir o paciente
+        if (!lista.classList.contains("modo-foco")) {
+            posicaoScrollListaAntesDoFoco = lista.scrollTop;
+        }
+
+        lista.classList.add("modo-foco");
+        esconderIrmaosDoFoco(lista);
+        lista.scrollTop = 0;
+        return;
+    }
+
+    lista.classList.remove("modo-foco");
+
+    const alvo = posicaoScrollListaAntesDoFoco;
+    posicaoScrollListaAntesDoFoco = null;
+
+    const animou = revelarIrmaosDoFoco(lista);
+    ajustarAlturaListaRegistros();
+
+    if (alvo === null) return;
+    if (animou) segurarRolagemDaLista(lista, alvo, DURACAO_FOCO_MS);
+    else lista.scrollTop = alvo;
+}
+
+/* ==================================================================
+   ALTURA DA LISTA (v1.6.2)
+   ------------------------------------------------------------------
+   A página BANCO deve caber inteira na tela — sem rolagem da janela.
+   Como o que fica acima da lista muda de tamanho (cartões de status,
+   backup aberto ou fechado, painel de dados extraídos aberto ou
+   fechado, rodapé recolhido ou não), a altura da lista não pode ser um
+   número fixo no CSS: ela é o que sobra.
+
+   O detalhe chato: o <body> usa "zoom", então o que se escreve em
+   height NÃO é o que a tela mede. A razão entre getBoundingClientRect
+   (medida da tela) e offsetHeight (medida do layout) devolve esse fator
+   sem precisar chutar o valor do zoom.
+   ================================================================== */
+function ajustarAlturaListaRegistros() {
+    const lista = document.getElementById("listaRegistrosBanco");
+    const pagina = document.getElementById("pagina-banco");
+    if (!lista || !pagina) return;
+
+    if (!lista.classList.contains("conectado")) {
+        lista.style.removeProperty("--altura-lista");
+        return;
+    }
+
+    if (!pagina.classList.contains("ativa")) return;
+
+    const caixa = lista.getBoundingClientRect();
+    const escala = lista.offsetHeight > 0 ? caixa.height / lista.offsetHeight : 0;
+    if (!escala) return;
+
+    const topo = caixa.top + window.scrollY;
+
+    const rodapeRegistros = document.querySelector("#pagina-banco .rodape-registros");
+    const alturaRodapeRegistros = rodapeRegistros
+        ? rodapeRegistros.getBoundingClientRect().height + 10 * escala
+        : 0;
+
+    const footer = document.getElementById("footerSistema");
+    const alturaFooter = (footer && !footer.classList.contains("recolhido"))
+        ? footer.getBoundingClientRect().height
+        : 0;
+
+    const folga = 14 * escala;
+    const disponivel = window.innerHeight - topo - alturaRodapeRegistros - alturaFooter - folga;
+
+    const alturaCalculada = Math.round(disponivel / escala);
+    
+    // Trava a altura em no máximo 645px (nunca aumenta além disso, apenas reduz se a tela for menor)
+    const alturaFinal = Math.min(645, Math.max(200, alturaCalculada));
+
+    lista.style.setProperty("--altura-lista", `${alturaFinal}px`);
+}
+
+function alturaDoCartaoEmFoco(lista) {
+    return null;
+}
+
+function sincronizarTravaDeRolagem() {
+    ajustarAlturaListaRegistros();
+}
+
+let timerAlturaLista = null;
+window.addEventListener("resize", () => {
+    clearTimeout(timerAlturaLista);
+    timerAlturaLista = setTimeout(ajustarAlturaListaRegistros, 120);
+});
+
+function fecharRegistroAberto(aoConcluir = null) {
+    const container = document.getElementById("listaRegistrosBanco");
+    const aberto = container?.querySelector(".registro-item.aberto");
+
+    // Trocar de paciente NÃO é o mesmo que voltar para a lista: ali o
+    // modo foco continua valendo (só muda quem está aberto), então nem
+    // as outras linhas reaparecem nem faz sentido gastar animação
+    // fechando um corpo que some no mesmo instante em que outro abre.
+    const vaiAbrirOutro = typeof aoConcluir === "function";
+
+    if (aberto) {
+        aberto.classList.remove("aberto");
+        const corpo = aberto.querySelector(".registro-corpo");
+
+        if (corpo) {
+            if (vaiAbrirOutro) corpo.remove();
+            else fecharSanfona(corpo, () => corpo.remove());
+        }
+    }
+
+    if (!vaiAbrirOutro) ativarModoFoco(false);
+
+    registroAbertoPasta = null;
+    registroTemAlteracao = false;
+    registroAvisouDescarte = false;
+    anexosPendentesRegistro = [];
+    liberarUrlsTemporarias();
+
+    if (vaiAbrirOutro) aoConcluir();
+}
+
+function alternarRegistro(item) {
+    // Se o cartão clicado já está aberto, fecha no primeiro clique diretamente
+    if (item.classList.contains("aberto") || registroAbertoPasta === item.dataset.pasta) {
+        fecharRegistroAberto();
+        return;
+    }
+
+    // Se outro cartão estava aberto, fecha o anterior e abre o novo
+    fecharRegistroAberto(() => {
+        abrirRegistro(item);
+    });
+}
+
+function marcarRegistroEditado(corpo) {
+    registroTemAlteracao = true;
+    registroAvisouDescarte = false;
+
+    const btnSalvar = corpo.querySelector(".btn-salvar-registro");
+    if (btnSalvar) btnSalvar.disabled = false;
+}
+
+function criarCampoRegistro(campo, valor, corpo) {
+    const caixa = document.createElement("div");
+    caixa.className = "campo-registro" + (campo.largo ? " campo-registro-largo" : "");
+
+    const label = document.createElement("label");
+    label.textContent = campo.rotulo;
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = valor || "";
+    input.dataset.campo = campo.chave;
+    input.autocomplete = "off";
+    if (campo.dica) input.placeholder = campo.dica;
+    if (campo.lista) input.setAttribute("list", campo.lista);
+
+    input.addEventListener("input", () => {
+        marcarRegistroEditado(corpo);
+        if (campo.chave === "om" && omsConhecidas[input.value]) {
+            const campoAbr = corpo.querySelector('[data-campo="omAbr"]');
+            if (campoAbr) campoAbr.value = omsConhecidas[input.value];
+        }
+    });
+
+    caixa.appendChild(label);
+    caixa.appendChild(input);
+    return caixa;
+}
+
+function criarChecklistRegistro(dados) {
+    const grade = document.createElement("div");
+    grade.className = "registro-checklist";
+
+    const checklist = lerChecklist(dados);
+
+    for (const item of ITENS_CHECKLIST) {
+        const etiqueta = document.createElement("label");
+        etiqueta.className = "item-checklist" + (checklist[item.chave] ? " feito" : "");
+        etiqueta.dataset.item = item.chave;
+        etiqueta.title = item.dica;
+
+        const caixa = document.createElement("input");
+        caixa.type = "checkbox";
+        caixa.checked = checklist[item.chave];
+
+        const texto = document.createElement("span");
+        texto.className = "item-checklist-texto";
+        texto.textContent = item.rotulo;
+
+        caixa.addEventListener("change", async () => {
+            caixa.disabled = true;
+            const estadoFinal = await definirItemChecklist(dados, item.chave, caixa.checked);
+
+            caixa.checked = estadoFinal;
+            etiqueta.classList.toggle("feito", estadoFinal);
+            caixa.disabled = false;
+
+            marcarProximoPassoNoChecklist(grade, dados);
+        });
+
+        etiqueta.appendChild(caixa);
+        etiqueta.appendChild(texto);
+        grade.appendChild(etiqueta);
+    }
+
+    marcarProximoPassoNoChecklist(grade, dados);
+    return grade;
+}
+
+function marcarProximoPassoNoChecklist(grade, dados) {
+    const proximo = proximoItemPendente(dados);
+    const visiveis = etapasVisiveisDoChecklist(dados);
+
+    for (const etiqueta of grade.querySelectorAll(".item-checklist")) {
+        const chave = etiqueta.dataset.item;
+        etiqueta.classList.toggle("proximo", !!proximo && chave === proximo.chave);
+        etiqueta.classList.toggle("etapa-trancada", !visiveis.has(chave));
+
+        const caixa = etiqueta.querySelector('input[type="checkbox"]');
+        // Etapa trancada sai também da navegação por Tab: se não dá para
+        // ver, não deveria dar para marcar sem querer.
+        if (caixa) caixa.tabIndex = visiveis.has(chave) ? 0 : -1;
+    }
+
+    ajustarAlturaListaRegistros();
+}
+
+function proximoItemPendente(dados) {
+    const checklist = lerChecklist(dados);
+    return ITENS_CHECKLIST.find(item => !checklist[item.chave]) || null;
+}
+
+async function carregarArquivosDoRegistro(dados, area) {
+    area.innerHTML = "";
+
+    let arquivos = [];
+    try {
+        const pasta = await dirHandleBanco.getDirectoryHandle(dados._nomePasta);
+        for await (const entrada of pasta.values()) {
+            if (entrada.kind === "file" && entrada.name !== "dados.json") {
+                arquivos.push(entrada.name);
+            }
+        }
+    } catch (erro) {
+        console.error("Erro ao listar os arquivos do paciente:", erro);
+        mostrarMensagemNaLista(area, "Não foi possível ler os arquivos desta pasta.");
+        return;
+    }
+
+    if (arquivos.length === 0) {
+        mostrarMensagemNaLista(area, "Nenhum PDF guardado na pasta deste paciente.");
+    }
+
+    for (const nome of arquivos.sort()) {
+        const linha = document.createElement("div");
+        linha.className = "arquivo-registro";
+
+        const nomeEl = document.createElement("span");
+        nomeEl.className = "arquivo-registro-nome";
+        nomeEl.textContent = nome;
+
+        const btnVer = document.createElement("button");
+        btnVer.type = "button";
+        btnVer.className = "btn-registro btn-arquivo-registro";
+        btnVer.textContent = "VISUALIZAR";
+        btnVer.addEventListener("click", () => visualizarArquivoDoRegistro(dados._nomePasta, nome));
+
+        linha.appendChild(nomeEl);
+        linha.appendChild(btnVer);
+        area.appendChild(linha);
+    }
+
+    for (const pendente of anexosPendentesRegistro) {
+        const linha = document.createElement("div");
+        linha.className = "arquivo-registro";
+
+        const nomeEl = document.createElement("span");
+        nomeEl.className = "arquivo-registro-nome";
+        nomeEl.textContent = pendente.nomeOriginal;
+
+        const aviso = document.createElement("span");
+        aviso.className = "arquivo-registro-aviso";
+        aviso.textContent = "PENDENTE — grava ao salvar";
+
+        linha.appendChild(nomeEl);
+        linha.appendChild(aviso);
+        area.appendChild(linha);
+    }
+}
+
+async function visualizarArquivoDoRegistro(nomePasta, nomeArquivo) {
+    try {
+        const pasta = await dirHandleBanco.getDirectoryHandle(nomePasta);
+        const handle = await pasta.getFileHandle(nomeArquivo);
+        const arquivo = await handle.getFile();
+
+        const url = URL.createObjectURL(arquivo);
+        urlsTemporariasRegistro.push(url);
+
+        const janela = window.open(url, "_blank");
+        if (!janela) {
+            const link = document.createElement("a");
+            link.href = url;
+            link.target = "_blank";
+            link.rel = "noopener";
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        }
+    } catch (erro) {
+        console.error("Erro ao abrir o PDF:", erro);
+        mostrarToast(`Não foi possível abrir "${nomeArquivo}" (${erro.name || "erro"}).`, "erro");
+    }
+}
+
+function criarAreaAnexoRegistro(dados, corpo, areaArquivos) {
+    const linha = document.createElement("div");
+    linha.className = "linha-anexo-registro";
+
+    const dropzone = document.createElement("div");
+    dropzone.className = "dropZoneDoc dropzone-registro";
+
+    const texto = document.createElement("div");
+    texto.className = "textoDrop";
+    texto.textContent = "Clique ou arraste um PDF para anexar/substituir";
+
+    const dica = document.createElement("div");
+    dica.className = "nomeArquivo";
+    dica.textContent = "Escolha ao lado com que nome ele será gravado ANTES de soltar o arquivo.";
+    dropzone.appendChild(dica);
+    dropzone.appendChild(texto);
+
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".pdf";
+    dropzone.appendChild(input);
+
+    const select = document.createElement("select");
+    select.className = "select-nome-anexo";
+    select.title = "Com que nome o arquivo será gravado na pasta";
+    for (const opcao of [
+        { valor: "original", texto: "MANTER NOME DO ARQUIVO" },
+        { valor: "marcacao", texto: "GRAVAR COMO MARCAÇÃO" },
+        { valor: "solicitacao", texto: "GRAVAR COMO SOLICITAÇÃO" }
+    ]) {
+        const option = document.createElement("option");
+        option.value = opcao.valor;
+        option.textContent = opcao.texto;
+        select.appendChild(option);
+    }
+
+    configurarDropZone(dropzone, input, async (file) => {
+        try {
+            anexosPendentesRegistro.push({
+                nomeOriginal: file.name,
+                destino: select.value,
+                bytes: await file.arrayBuffer()
+            });
+
+            marcarRegistroEditado(corpo);
+            await carregarArquivosDoRegistro(dados, areaArquivos);
+            sincronizarSanfona(corpo);
+            mostrarToast("PDF na fila. Clique em SALVAR ALTERAÇÕES para gravá-lo.", "aviso");
+        } catch (erro) {
+            console.error("Erro ao ler o PDF anexado:", erro);
+            mostrarToast("Não foi possível ler o PDF anexado.", "erro");
+        }
+        input.value = "";
+    });
+
+    linha.appendChild(dropzone);
+    linha.appendChild(select);
+    return linha;
+}
+
+function criarAcoesRegistro(dados, corpo) {
+    const acoes = document.createElement("div");
+    acoes.className = "registro-acoes";
+
+    const btnSalvar = document.createElement("button");
+    btnSalvar.type = "button";
+    btnSalvar.className = "btn-registro btn-salvar-registro";
+    btnSalvar.textContent = "SALVAR ALTERAÇÕES";
+    btnSalvar.disabled = true;
+    btnSalvar.addEventListener("click", () => salvarAlteracoesRegistro(dados, corpo));
+
+    const selectUsar = document.createElement("select");
+    selectUsar.className = "select-usar-registro";
+
+    const passoLme = passoDoLME(dados);
+    for (const opcao of [
+        { valor: "lme", texto: `USAR NO LME (${passoLme.item.rotulo.toUpperCase()})` },
+        { valor: "excel", texto: "USAR NO EXCEL (LINHA DA PLANILHA)" },
+        { valor: "doc", texto: "USAR NO DOC (RENOMEAR PDF)" }
+    ]) {
+        const option = document.createElement("option");
+        option.value = opcao.valor;
+        option.textContent = opcao.texto;
+        selectUsar.appendChild(option);
+    }
+
+    const btnUsar = document.createElement("button");
+    btnUsar.type = "button";
+    btnUsar.className = "btn-registro btn-usar-registro";
+    btnUsar.textContent = "USAR";
+    btnUsar.addEventListener("click", () => usarRegistroNaPagina(selectUsar.value, dados));
+
+    const btnExcluir = document.createElement("button");
+    btnExcluir.type = "button";
+    btnExcluir.className = "btn-registro btn-registro-perigo";
+    btnExcluir.textContent = "EXCLUIR DO BANCO";
+    btnExcluir.addEventListener("click", () => abrirModalExcluir(dados));
+
+    acoes.appendChild(btnSalvar);
+    acoes.appendChild(selectUsar);
+    acoes.appendChild(btnUsar);
+    acoes.appendChild(btnExcluir);
+    return acoes;
+}
+
+function abrirRegistro(item) {
+    const dados = mapaRegistrosPorPasta.get(item.dataset.pasta);
+    if (!dados) return;
+
+    const corpo = document.createElement("div");
+    corpo.className = "registro-corpo";
+
+    const tituloCampos = document.createElement("div");
+    tituloCampos.className = "registro-subtitulo";
+    tituloCampos.textContent = "DADOS DO PACIENTE (dados.json)";
+    corpo.appendChild(tituloCampos);
+
+    const grade = document.createElement("div");
+    grade.className = "registro-campos";
+    for (const campo of CAMPOS_EDITAVEIS_REGISTRO) {
+        grade.appendChild(criarCampoRegistro(campo, dados[campo.chave], corpo));
+    }
+    corpo.appendChild(grade);
+
+    const tituloArquivos = document.createElement("div");
+    tituloArquivos.className = "registro-subtitulo";
+    tituloArquivos.textContent = "ARQUIVOS NA PASTA";
+    corpo.appendChild(tituloArquivos);
+
+    const areaArquivos = document.createElement("div");
+    areaArquivos.className = "registro-arquivos";
+    corpo.appendChild(areaArquivos);
+
+    corpo.appendChild(criarAreaAnexoRegistro(dados, corpo, areaArquivos));
+
+    const tituloChecklist = document.createElement("div");
+    tituloChecklist.className = "registro-subtitulo";
+    tituloChecklist.textContent = "ANDAMENTO DO PACIENTE (grava ao marcar)";
+    corpo.appendChild(tituloChecklist);
+
+    corpo.appendChild(criarChecklistRegistro(dados));
+    corpo.appendChild(criarAcoesRegistro(dados, corpo));
+
+    item.querySelector(".registro-corpo")?.remove();
+    item.appendChild(corpo);
+
+    // Se este cartão estava encolhido pelo modo foco (troca de paciente
+    // sem passar pela lista), desfaz o encolhimento antes de abrir.
+    limparAnimacaoDeFoco(item);
+    item.classList.add("aberto");
+
+    ativarModoFoco(true);
+    abrirSanfona(corpo);
+    ajustarAlturaListaRegistros();
+
+    registroAbertoPasta = item.dataset.pasta;
+    registroTemAlteracao = false;
+    registroAvisouDescarte = false;
+    anexosPendentesRegistro = [];
+
+    carregarArquivosDoRegistro(dados, areaArquivos).then(() => {
+        sincronizarSanfona(corpo);
+    });
+}
+
+function recalcularCamposDerivados(dados) {
+    dados.dataHora = (dados.data && dados.horario) ? `${dados.data} - ${dados.horario}` : (dados.data || "");
+    dados.dataMilitar = formatarDataMilitar(dados.data);
+    dados.dataNomeArquivo = formatarDataNomeArquivo(dados.data);
+    const tratamento = tratamentoDoTipoOM(dados.tipoOM);
+    dados.cargoOM = tratamento.cargo;
+    dados.pronome = tratamento.pronome;
+    dados.especialidadeCrua = extrairEspecialidadeCrua(dados.especialidade) || (dados.especialidade || "").toUpperCase();
+    return dados;
+}
+
+function dataValidaParaBanco(texto) {
+    return /^\d{1,2}\/\d{1,2}\/\d{4}$/.test((texto || "").trim());
+}
+
+function nomeFinalDoAnexo(anexo, dados) {
+    const pacienteLimpo = sanitizarNomePasta(dados.paciente);
+    if (anexo.destino === "marcacao") return `Marcação - ${pacienteLimpo}.pdf`;
+    if (anexo.destino === "solicitacao") return `Solicitação - ${pacienteLimpo}.pdf`;
+    return sanitizarNomePasta(anexo.nomeOriginal);
+}
+
+async function salvarAlteracoesRegistro(dadosOriginais, corpo) {
+    if (!dirHandleBanco) {
+        mostrarToast("Conecte a pasta do banco antes de salvar.", "aviso");
+        return;
+    }
+
+    const editado = { ...dadosOriginais };
+    for (const campo of CAMPOS_EDITAVEIS_REGISTRO) {
+        const input = corpo.querySelector(`[data-campo="${campo.chave}"]`);
+        if (input) editado[campo.chave] = input.value.trim();
+    }
+
+    if (!editado.paciente || !editado.omAbr) {
+        mostrarToast("Paciente e OM abreviada não podem ficar em branco.", "aviso");
+        return;
+    }
+    if (!dataValidaParaBanco(editado.data)) {
+        mostrarToast("A data da consulta precisa estar no formato dd/mm/aaaa.", "aviso");
+        return;
+    }
+
+    recalcularCamposDerivados(editado);
+
+    const pastaAtual = dadosOriginais._nomePasta;
+    const pastaNova = montarNomePastaPaciente(editado);
+    const vaiRenomear = pastaNova !== pastaAtual;
+
+    const btnSalvar = corpo.querySelector(".btn-salvar-registro");
+    if (btnSalvar) btnSalvar.disabled = true;
+
+    try {
+        if (vaiRenomear) {
+            if (await pastaJaExisteNoBanco(pastaNova)) {
+                mostrarToast(`Já existe a pasta "${pastaNova}" no banco. Ajuste os dados ou exclua o registro repetido.`, "erro");
+                if (btnSalvar) btnSalvar.disabled = false;
+                return;
+            }
+
+            const destino = await dirHandleBanco.getDirectoryHandle(pastaNova, { create: true });
+            await gravarArquivoNaPasta(destino, "dados.json", JSON.stringify(limparCamposInternos(editado), null, 4));
+            await gravarAnexosPendentes(destino, editado);
+
+            const origem = await dirHandleBanco.getDirectoryHandle(pastaAtual);
+            await copiarArquivosDaPasta(origem, destino, ["dados.json"], nomeAntigo =>
+                renomearAnexoPadrao(nomeAntigo, dadosOriginais.paciente, editado.paciente)
+            );
+
+            await dirHandleBanco.removeEntry(pastaAtual, { recursive: true });
+            mostrarToast(`Registro salvo. A pasta passou a se chamar "${pastaNova}".`, "sucesso");
+        } else {
+            const pasta = await dirHandleBanco.getDirectoryHandle(pastaAtual, { create: true });
+            await gravarArquivoNaPasta(pasta, "dados.json", JSON.stringify(limparCamposInternos(editado), null, 4));
+            await gravarAnexosPendentes(pasta, editado);
+            mostrarToast("Registro atualizado com sucesso!", "sucesso");
+        }
+
+        registroTemAlteracao = false;
+        anexosPendentesRegistro = [];
+        registroReabrirPasta = pastaNova;
+        await atualizarListaPacientesBanco();
+
+    } catch (erro) {
+        console.error("Erro ao salvar as alterações do registro:", erro);
+        mostrarToast(`Não foi possível salvar (${erro.name || "erro"}).`, "erro");
+        if (btnSalvar) btnSalvar.disabled = false;
+    }
+}
+
+async function pastaJaExisteNoBanco(nomePasta) {
+    try {
+        await dirHandleBanco.getDirectoryHandle(nomePasta);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function gravarAnexosPendentes(pastaHandle, dados) {
+    for (const anexo of anexosPendentesRegistro) {
+        await gravarArquivoNaPasta(pastaHandle, nomeFinalDoAnexo(anexo, dados), anexo.bytes);
+    }
+}
+
+function renomearAnexoPadrao(nomeArquivo, pacienteAntigo, pacienteNovo) {
+    if (pacienteAntigo === pacienteNovo) return nomeArquivo;
+    const antigo = sanitizarNomePasta(pacienteAntigo);
+    const novo = sanitizarNomePasta(pacienteNovo);
+
+    if (nomeArquivo === `Marcação - ${antigo}.pdf`) return `Marcação - ${novo}.pdf`;
+    if (nomeArquivo === `Solicitação - ${antigo}.pdf`) return `Solicitação - ${novo}.pdf`;
+    return nomeArquivo;
+}
+
+function passoDoLME(dados) {
+    const doLme = ITENS_CHECKLIST.filter(item => item.pagina === "lme");
+    const checklist = lerChecklist(dados);
+
+    const pendente = doLme.find(item => !checklist[item.chave]);
+    return { item: pendente || doLme[doLme.length - 1], tudoFeito: !pendente };
+}
+
+async function copiarTextoSimples(texto) {
+    try {
+        await navigator.clipboard.writeText(texto);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function sincronizarChecklistNaTela(dados) {
+    const item = document.querySelector(`.registro-item[data-pasta="${CSS.escape(dados._nomePasta)}"]`);
+    const grade = item?.querySelector(".registro-checklist");
+    if (!grade) return;
+
+    const checklist = lerChecklist(dados);
+
+    for (const etiqueta of grade.querySelectorAll(".item-checklist")) {
+        const marcado = checklist[etiqueta.dataset.item] === true;
+        etiqueta.classList.toggle("feito", marcado);
+        const caixa = etiqueta.querySelector('input[type="checkbox"]');
+        if (caixa) caixa.checked = marcado;
+    }
+
+    marcarProximoPassoNoChecklist(grade, dados);
+}
+
+async function usarRegistroNaPagina(destino, dados) {
+    const identificador = `${dados.paciente} - ${dados.omAbr} (${dados.data})`;
+
+    if (!mapaPacientesBanco.has(identificador)) {
+        mostrarToast("Não foi possível carregar este paciente. Clique em ATUALIZAR e tente de novo.", "erro");
+        return;
+    }
+
+    const paginas = { lme: "inputPesquisaBanco", excel: "inputPesquisaExcel", doc: "inputPesquisaDoc" };
+    const campo = document.getElementById(paginas[destino]);
+    if (!campo) return;
+
+    if (destino === "doc" && tipoDocumentoSelect) {
+        tipoDocumentoSelect.value = "o";
+        tipoDocumentoSelect.dispatchEvent(new Event("change"));
+    }
+
+    campo.value = identificador;
+    campo.dispatchEvent(new Event("input"));
+
+    ativarAba(destino);
+    localStorage.setItem("automed_abaAtiva", destino);
+
+    let itemEtapa = null;
+    let avisoExtra = "";
+
+    if (destino === "lme") {
+        const passo = passoDoLME(dados);
+        itemEtapa = passo.item;
+
+        if (modeloSelect) {
+            modeloSelect.value = passo.item.modelo;
+            modeloSelect.dispatchEvent(new Event("change"));
+            localStorage.setItem("automed_modeloSelect", modeloSelect.value);
+        }
+
+        if (passo.tudoFeito) {
+            avisoExtra = " Todos os DIEx deste paciente já estavam marcados como feitos.";
+        }
+
+        document.getElementById("gerarBtn")?.click();
+        document.getElementById("copiarBtn")?.click();
+
+    } else if (destino === "excel") {
+        itemEtapa = ITENS_CHECKLIST.find(item => item.pagina === "excel");
+        atualizarLinhaExcel();
+        document.getElementById("copiarExcelBtn")?.click();
+
+    } else if (destino === "doc") {
+        itemEtapa = ITENS_CHECKLIST.find(item => item.pagina === "doc");
+        const nomeGerado = document.getElementById("nomeArquivoGerado")?.value.trim();
+        if (nomeGerado) {
+            const copiou = await copiarTextoSimples(nomeGerado);
+            mostrarToast(
+                copiou ? "Nome do arquivo gerado e copiado!" : "Nome gerado. Não foi possível copiar automaticamente.",
+                copiou ? "sucesso" : "aviso"
+            );
+        } else {
+            mostrarToast("Paciente carregado, mas não deu para montar o nome do arquivo.", "aviso");
+        }
+    }
+
+    if (itemEtapa && !lerChecklist(dados)[itemEtapa.chave]) {
+        mostrarToast(
+            `Pronto na página ${destino.toUpperCase()}.${avisoExtra} Marcar "${itemEtapa.rotulo}" como feito?`,
+            "sucesso",
+            {
+                texto: "MARCAR",
+                aoClicar: async () => {
+                    await definirItemChecklist(dados, itemEtapa.chave, true);
+                    sincronizarChecklistNaTela(dados);
+                    mostrarToast(`"${itemEtapa.rotulo}" marcado como feito.`, "sucesso");
+                }
+            }
+        );
+    } else {
+        mostrarToast(`Paciente carregado na página ${destino.toUpperCase()}.${avisoExtra}`, "sucesso");
+    }
+}
+
+document.getElementById("inputBuscaRegistros")?.addEventListener("input", (e) => {
+    if (registroTemAlteracao) {
+        mostrarToast("As alterações não salvas do registro aberto foram descartadas.", "aviso");
+    }
+    filtroRegistros = e.target.value;
+    quantidadeVisivelRegistros = LOTE_REGISTROS;
+    renderizarRegistrosBanco();
+});
+
+document.getElementById("btnCarregarMaisRegistros")?.addEventListener("click", () => {
+    quantidadeVisivelRegistros += LOTE_REGISTROS;
+    renderizarRegistrosBanco();
+});
+
+document.getElementById("btnAtualizarRegistros")?.addEventListener("click", async () => {
+    if (!dirHandleBanco) {
+        mostrarToast("Conecte a pasta do banco primeiro.", "aviso");
+        return;
+    }
+    await atualizarListaPacientesBanco();
+    mostrarToast("Lista relida da pasta.", "sucesso");
+});
+
+function alternarBackupBanco(abrir) {
+    const area = document.getElementById("areaBackupBanco");
+    const botao = document.getElementById("btnToggleBackupBanco");
+    if (!area || !botao) return;
+
+    botao.classList.toggle("aberto", abrir);
+    area.classList.toggle("aberto", abrir);
+    area.classList.remove("oculto");
+    botao.setAttribute("aria-expanded", String(abrir));
+    localStorage.setItem("automed_backupBancoAberto", String(abrir));
+
+    // A faixa de backup empurra a lista para baixo: remede o que sobrou.
+    ajustarAlturaListaRegistros();
+    setTimeout(ajustarAlturaListaRegistros, 320);
+}
+
+document.getElementById("btnToggleBackupBanco")?.addEventListener("click", () => {
+    const estaAberto = document.getElementById("btnToggleBackupBanco")?.classList.contains("aberto");
+    alternarBackupBanco(!estaAberto);
+});
+
+alternarBackupBanco(localStorage.getItem("automed_backupBancoAberto") === "true");
+
+prepararListasDeSugestaoRegistros();
+renderizarRegistrosBanco();
+atualizarPainelInicialBanco();
+
+
+/* ============================================================
+   MÓDULO 23 — ADICIONAR PACIENTE PELA PÁGINA BANCO (v1.6.2)
+   ------------------------------------------------------------
+   Cadastrar um paciente novo exigia sair da página inicial, ir até o
+   LME, anexar os dois PDFs e voltar. Aqui as mesmas duas dropzones
+   ficam na própria página do banco, com botão próprio de gravar.
+
+   O estado é SEPARADO do estado da página LME de propósito: soltar um
+   PDF aqui não pode mexer no que já estiver montado lá (nem o
+   contrário), senão um cadastro rápido no banco apagaria o DIEx que a
+   pessoa estava escrevendo.
+   ============================================================ */
+let textoPDFBancoAgendamento = "";
+let textoPDFBancoSolicitacao = "";
+let arquivoBancoAgendamentoObj = null;
+let arquivoBancoSolicitacaoObj = null;
+
+const dropZoneBancoAgendamento = document.getElementById("dropZoneBancoAgendamento");
+const pdfBancoAgendamento = document.getElementById("pdfBancoAgendamento");
+const dropZoneBancoSolicitacao = document.getElementById("dropZoneBancoSolicitacao");
+const pdfBancoSolicitacao = document.getElementById("pdfBancoSolicitacao");
+
+const CAMPOS_EXTRAIDOS_BANCO = [
+    { id: "dbgPacienteBanco",      chave: "paciente" },
+    { id: "dbgMedicoBanco",        chave: "medico", formatar: formatarMedico },
+    { id: "dbgEspecialidadeBanco", chave: "especialidade" },
+    { id: "dbgDataHoraBanco",      chave: "dataHora" },
+    { id: "dbgLocalBanco",         chave: "local" },
+    { id: "dbgOMBanco",            chave: "om" },
+    { id: "dbgOMAbrBanco",         chave: "omAbr" },
+    { id: "dbgTipoOMBanco",        chave: "tipoOM" },
+    { id: "dbgNumeroDIExBanco",    chave: "numeroDIEx" },
+    { id: "dbgDataDIExBanco",      chave: "dataDIEx" }
+];
+
+function dadosDaFaixaAdicionarBanco() {
+    if (!textoPDFBancoAgendamento) return null;
+    return extrairDadosCompletos(textoPDFBancoAgendamento, textoPDFBancoSolicitacao);
+}
+
+function atualizarPainelExtraidosBanco() {
+    const dados = dadosDaFaixaAdicionarBanco();
+
+    for (const campo of CAMPOS_EXTRAIDOS_BANCO) {
+        const el = document.getElementById(campo.id);
+        if (!el) continue;
+
+        const valor = dados ? dados[campo.chave] : "";
+        el.textContent = (campo.formatar ? campo.formatar(valor) : valor) || "-";
+    }
+}
+
+function lerBancoAgendamento(file) {
+    arquivoBancoAgendamentoObj = null;
+    lerTextoDePDF(
+        file, "nomeArquivoBancoAgendamento",
+        texto => { textoPDFBancoAgendamento = texto; atualizarPainelExtraidosBanco(); },
+        "Erro ao ler o PDF de Agendamento.",
+        conteudo => { arquivoBancoAgendamentoObj = conteudo; }
+    );
+}
+
+function lerBancoSolicitacao(file) {
+    arquivoBancoSolicitacaoObj = null;
+    lerTextoDePDF(
+        file, "nomeArquivoBancoSolicitacao",
+        texto => { textoPDFBancoSolicitacao = texto; atualizarPainelExtraidosBanco(); },
+        "Erro ao ler o PDF de Solicitação.",
+        conteudo => { arquivoBancoSolicitacaoObj = conteudo; }
+    );
+}
+
+if (dropZoneBancoAgendamento && pdfBancoAgendamento) {
+    configurarDropZone(dropZoneBancoAgendamento, pdfBancoAgendamento, lerBancoAgendamento);
+}
+if (dropZoneBancoSolicitacao && pdfBancoSolicitacao) {
+    configurarDropZone(dropZoneBancoSolicitacao, pdfBancoSolicitacao, lerBancoSolicitacao);
+}
+
+function limparFaixaAdicionarBanco(avisar = true) {
+    textoPDFBancoAgendamento = "";
+    textoPDFBancoSolicitacao = "";
+    arquivoBancoAgendamentoObj = null;
+    arquivoBancoSolicitacaoObj = null;
+
+    if (pdfBancoAgendamento) pdfBancoAgendamento.value = "";
+    if (pdfBancoSolicitacao) pdfBancoSolicitacao.value = "";
+
+    for (const id of ["nomeArquivoBancoAgendamento", "nomeArquivoBancoSolicitacao"]) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = "";
+    }
+
+    atualizarPainelExtraidosBanco();
+    if (avisar) mostrarToast("PDFs descartados. Pronto para cadastrar outro paciente.", "sucesso");
+}
+
+document.getElementById("btnLimparAdicionarBanco")?.addEventListener("click", () => {
+    limparFaixaAdicionarBanco();
+});
+
+document.getElementById("btnAdicionarPacienteBanco")?.addEventListener("click", async () => {
+    if (!dirHandleBanco) {
+        mostrarToast("Primeiro clique em 'CONECTAR PASTA DO BANCO'.", "aviso");
+        return;
+    }
+
+    const dadosNovos = dadosDaFaixaAdicionarBanco();
+    if (!dadosNovos || !dadosNovos.paciente) {
+        mostrarToast("Anexe pelo menos o PDF de Agendamento antes de adicionar.", "aviso");
+        return;
+    }
+
+    const anexos = montarAnexosDePDFs(dadosNovos, arquivoBancoAgendamentoObj, arquivoBancoSolicitacaoObj);
+
+    // Mesmo tratamento de duplicidade da barra do LME: se já existe
+    // alguém com este nome, quem decide o que fazer é o usuário.
+    const existente = buscarPacienteExistentePorNome(dadosNovos.paciente);
+    if (existente) {
+        abrirModalDuplicidade(existente, dadosNovos, anexos);
+        return;
+    }
+
+    const resultado = await executarSalvamentoBanco(dadosNovos, "", { arquivos: anexos });
+    if (resultado.ok) limparFaixaAdicionarBanco(false);
+});
+
+/* Painel retrátil de conferência: mesma sanfona da faixa de backup. */
+function alternarExtraidosBanco(abrir) {
+    const area = document.getElementById("areaExtraidosBanco");
+    const botao = document.getElementById("btnToggleExtraidosBanco");
+    if (!area || !botao) return;
+
+    botao.classList.toggle("aberto", abrir);
+    area.classList.toggle("aberto", abrir);
+    botao.setAttribute("aria-expanded", String(abrir));
+    localStorage.setItem("automed_extraidosBancoAberto", String(abrir));
+
+    // O painel empurra a lista para baixo: remede o espaço que sobrou,
+    // agora e de novo quando a transição terminar.
+    ajustarAlturaListaRegistros();
+    setTimeout(ajustarAlturaListaRegistros, 340);
+}
+
+document.getElementById("btnToggleExtraidosBanco")?.addEventListener("click", () => {
+    const estaAberto = document.getElementById("btnToggleExtraidosBanco")?.classList.contains("aberto");
+    alternarExtraidosBanco(!estaAberto);
+});
+
+alternarExtraidosBanco(localStorage.getItem("automed_extraidosBancoAberto") === "true");
+atualizarPainelExtraidosBanco();
