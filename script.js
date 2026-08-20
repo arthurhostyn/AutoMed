@@ -25,6 +25,8 @@
    21. Rascunho automático do resultado gerado
    22. Visualizador de registros do banco (página BANCO)
    23. Adicionar paciente pela página BANCO
+   24. "Abrir no banco" nas barras de pesquisa (LME/EXCEL/DOC)
+   25. Navegação por teclado na lista de registros (página BANCO)
    ============================================================ */
 
 /* ============================================================
@@ -1315,6 +1317,8 @@ function alternarTipoDocumento() {
         if (comissaoSelecionada) inputPesquisaDoc.value = "";
     }
 
+    document.getElementById("btnAbrirNoBancoDoc")?.classList.toggle("oculto", comissaoSelecionada);
+
     blocoLmeScan.classList.toggle("oculto", comissaoSelecionada);
     blocoComissaoEtica.classList.toggle("oculto", !comissaoSelecionada);
     painelExtraidosLmeScan.classList.toggle("oculto", comissaoSelecionada);
@@ -1809,39 +1813,10 @@ async function executarSalvamentoBanco(dados, sufixoPasta = "", opcoes = {}) {
     return { ok: true, nomePasta, motivo: "" };
 }
 
-document.getElementById("btnInserirBanco")?.addEventListener("click", async () => {
-    if (!dirHandleBanco) {
-        mostrarToast("Primeiro clique em 'CONECTAR PASTA DO BANCO'.", "aviso");
-        return;
-    }
-
-    const dadosNovos = dadosBancoCarregados || extrairDadosCompletos(textoPDF, textoPDFSolicitacao);
-    if (!dadosNovos || !dadosNovos.paciente) {
-        mostrarToast("Anexe os PDFs antes de salvar.", "aviso");
-        return;
-    }
-
-    const existente = buscarPacienteExistentePorNome(dadosNovos.paciente);
-    if (existente) {
-        abrirModalDuplicidade(existente, dadosNovos, anexosDaPaginaLME(dadosNovos));
-    } else {
-        await executarSalvamentoBanco(dadosNovos);
-    }
-});
-
-document.getElementById("btnExcluirBanco")?.addEventListener("click", () => {
-    if (!dirHandleBanco) {
-        mostrarToast("Conecte a pasta do banco de dados primeiro.", "aviso");
-        return;
-    }
-
-    if (!dadosBancoCarregados || !dadosBancoCarregados._nomePasta) {
-        mostrarToast("Selecione um paciente salvo na barra de pesquisa para excluir.", "aviso");
-        return;
-    }
-
-    abrirModalExcluir(dadosBancoCarregados);
-});
+/* v1.6.3: os botões EXCLUIR e SALVAR saíram da barra de pesquisa do LME —
+   cadastrar e excluir paciente agora só acontece pela página BANCO (ver
+   MÓDULO 22 e MÓDULO 23). A busca aqui continua só carregando o paciente
+   no painel do LME (ver listener de "inputPesquisaBanco" acima). */
 
 document.addEventListener("click", async (e) => {
     const btn = e.target.closest("button");
@@ -1858,9 +1833,11 @@ document.addEventListener("click", async (e) => {
         fecharModalDuplicidade();
 
         const nomePastaNova = montarNomePastaPaciente(novo);
+        registroReabrirPasta = nomePastaNova;
         const resultado = await executarSalvamentoBanco(novo, "", { avisar: false, atualizarLista: false, arquivos: anexos });
 
         if (!resultado.ok) {
+            registroReabrirPasta = null;
             await atualizarListaPacientesBanco();
             mostrarToast(`Nada foi substituído: ${resultado.motivo}.`, "erro");
             return;
@@ -1888,7 +1865,9 @@ document.addEventListener("click", async (e) => {
         const anexos = anexosPendentesModal;
         fecharModalDuplicidade();
         const idUnico = new Date().getTime().toString().slice(-4);
-        await executarSalvamentoBanco(dadosParaSalvar, `(Cópia ${idUnico})`, { arquivos: anexos });
+        registroReabrirPasta = montarNomePastaPaciente(dadosParaSalvar, `(Cópia ${idUnico})`);
+        const resultado = await executarSalvamentoBanco(dadosParaSalvar, `(Cópia ${idUnico})`, { arquivos: anexos });
+        if (!resultado.ok) registroReabrirPasta = null;
     } else if (btn.id === "btnModalCancelarExclusao") {
         fecharModalExcluir();
     } else if (btn.id === "btnModalConfirmarExclusao") {
@@ -2116,29 +2095,15 @@ function atualizarPainelInicialBanco() {
     document.getElementById("listaRegistrosBanco")?.classList.toggle("conectado", conectado);
     ajustarAlturaListaRegistros();
 
-    let concluidos = 0;
-    let pendentes = 0;
-
-    for (const dados of mapaPacientesBanco.values()) {
-        if (progressoChecklist(dados).completo) concluidos++;
-        else pendentes++;
-    }
-
     const total = document.getElementById("statusTotalTopo");
-    const elPendentes = document.getElementById("statusPendentesTopo");
-    const elConcluidos = document.getElementById("statusConcluidosTopo");
-
     if (total) total.textContent = conectado ? mapaPacientesBanco.size : "—";
-    if (elPendentes) elPendentes.textContent = conectado ? pendentes : "—";
-    if (elConcluidos) elConcluidos.textContent = conectado ? concluidos : "—";
 }
 
 function atualizarEstatisticasBanco() {
-    // O antigo cartão RESUMO DO BANCO (totais de OMs e especialidades)
-    // foi retirado da página na v1.6.2 para liberar altura: a meta agora
-    // é que a página BANCO caiba inteira na tela. O que interessa de
-    // relance — conectado, total, pendentes e concluídos — continua nos
-    // cartões do topo, montados por atualizarPainelInicialBanco.
+    // O antigo cartão RESUMO DO BANCO (totais de OMs e especialidades) foi
+    // retirado na v1.6.2; na v1.6.3 os cartões de "com pendências" e
+    // "concluídos" também saíram, para deixar o cabeçalho só com o status
+    // da pasta e o total de pacientes — montados por atualizarPainelInicialBanco.
     atualizarPainelInicialBanco();
 }
 
@@ -2254,6 +2219,11 @@ let anexosPendentesRegistro = [];
 let urlsTemporariasRegistro = [];
 let posicaoRolagemAntesDoFoco = null;
 let posicaoScrollListaAntesDoFoco = null;
+
+// Índice do item destacado pela navegação de teclado (setas ↑/↓ + Enter)
+// — ver MÓDULO 25. Fica aqui, junto do resto do estado da lista, porque
+// renderizarRegistrosBanco (mais abaixo) já o zera na primeira renderização.
+let indiceRegistroSelecionado = -1;
 
 const CAMPOS_EDITAVEIS_REGISTRO = [
     { chave: "paciente",      rotulo: "Paciente",           largo: true },
@@ -2496,6 +2466,7 @@ function renderizarRegistrosBanco() {
     ativarModoFoco(false);
     registroAbertoPasta = null;
     registroTemAlteracao = false;
+    indiceRegistroSelecionado = -1;
     registroAvisouDescarte = false;
     anexosPendentesRegistro = [];
     liberarUrlsTemporarias();
@@ -3456,19 +3427,19 @@ async function usarRegistroNaPagina(destino, dados) {
 
     if (itemEtapa && !lerChecklist(dados)[itemEtapa.chave]) {
         mostrarToast(
-            `Pronto na página ${destino.toUpperCase()}.${avisoExtra} Marcar "${itemEtapa.rotulo}" como feito?`,
+            `${dados.paciente}: pronto na página ${destino.toUpperCase()}.${avisoExtra} Marcar "${itemEtapa.rotulo}" como feito?`,
             "sucesso",
             {
                 texto: "MARCAR",
                 aoClicar: async () => {
                     await definirItemChecklist(dados, itemEtapa.chave, true);
                     sincronizarChecklistNaTela(dados);
-                    mostrarToast(`"${itemEtapa.rotulo}" marcado como feito.`, "sucesso");
+                    mostrarToast(`${dados.paciente}: "${itemEtapa.rotulo}" marcado como feito.`, "sucesso");
                 }
             }
         );
     } else {
-        mostrarToast(`Paciente carregado na página ${destino.toUpperCase()}.${avisoExtra}`, "sucesso");
+        mostrarToast(`${dados.paciente} carregado na página ${destino.toUpperCase()}.${avisoExtra}`, "sucesso");
     }
 }
 
@@ -3646,8 +3617,13 @@ document.getElementById("btnAdicionarPacienteBanco")?.addEventListener("click", 
         return;
     }
 
+    // v1.6.3: os PDFs anexados aqui só saem com um clique em LIMPAR — não
+    // mais sozinhos ao salvar. E o paciente recém-criado já abre direto
+    // na caixa do banco (mesmo mecanismo de registroReabrirPasta usado ao
+    // editar um registro existente).
+    registroReabrirPasta = montarNomePastaPaciente(dadosNovos);
     const resultado = await executarSalvamentoBanco(dadosNovos, "", { arquivos: anexos });
-    if (resultado.ok) limparFaixaAdicionarBanco(false);
+    if (!resultado.ok) registroReabrirPasta = null;
 });
 
 /* Painel retrátil de conferência: mesma sanfona da faixa de backup. */
@@ -3674,3 +3650,100 @@ document.getElementById("btnToggleExtraidosBanco")?.addEventListener("click", ()
 
 alternarExtraidosBanco(localStorage.getItem("automed_extraidosBancoAberto") === "true");
 atualizarPainelExtraidosBanco();
+
+/* ============================================================
+   MÓDULO 24 — "ABRIR NO BANCO" NAS BARRAS DE PESQUISA (v1.6.3)
+   ------------------------------------------------------------
+   As barras de pesquisa do LME, EXCEL e DOC perderam os botões
+   EXCLUIR/SALVAR (MÓDULO 14): no lugar, cada uma ganhou este botão, que
+   leva direto para a página BANCO já com o registro do paciente
+   digitado na pesquisa aberto na caixa — mesmo mecanismo de
+   registroReabrirPasta usado ao salvar/editar um registro (MÓDULO 22).
+   ============================================================ */
+function abrirPacienteNoBancoAPartirDaPesquisa(idCampoPesquisa) {
+    const campo = document.getElementById(idCampoPesquisa);
+    const dados = campo ? mapaPacientesBanco.get(campo.value) : null;
+
+    if (!dados || !dados._nomePasta) {
+        mostrarToast("Selecione um paciente salvo na pesquisa antes de abrir no banco.", "aviso");
+        return;
+    }
+
+    ativarAba("banco");
+    localStorage.setItem("automed_abaAtiva", "banco");
+
+    const campoBusca = document.getElementById("inputBuscaRegistros");
+    if (campoBusca) campoBusca.value = dados.paciente;
+    filtroRegistros = dados.paciente;
+    quantidadeVisivelRegistros = LOTE_REGISTROS;
+
+    registroReabrirPasta = dados._nomePasta;
+    renderizarRegistrosBanco();
+}
+
+document.getElementById("btnAbrirNoBancoLme")?.addEventListener("click", () => {
+    abrirPacienteNoBancoAPartirDaPesquisa("inputPesquisaBanco");
+});
+document.getElementById("btnAbrirNoBancoExcel")?.addEventListener("click", () => {
+    abrirPacienteNoBancoAPartirDaPesquisa("inputPesquisaExcel");
+});
+document.getElementById("btnAbrirNoBancoDoc")?.addEventListener("click", () => {
+    abrirPacienteNoBancoAPartirDaPesquisa("inputPesquisaDoc");
+});
+
+/* ============================================================
+   MÓDULO 25 — NAVEGAÇÃO POR TECLADO NA LISTA DE REGISTROS (BANCO)
+   ------------------------------------------------------------
+   Com a página BANCO ativa, as setas ↑/↓ percorrem os pacientes visíveis
+   na caixa (a primeira seta pressionada sempre pousa no primeiro da
+   lista) e Enter abre/fecha o paciente destacado — dá para navegar o
+   banco inteiro sem tocar no mouse. Fica desligado enquanto um registro
+   já está aberto (ali as setas/Enter pertencem à edição dos campos) ou
+   enquanto um modal está por cima da tela.
+   ============================================================ */
+function itensRegistroVisiveis() {
+    const container = document.getElementById("listaRegistrosBanco");
+    return container ? [...container.querySelectorAll(".registro-item")] : [];
+}
+
+function marcarRegistroSelecionadoPorTeclado(indice) {
+    const itens = itensRegistroVisiveis();
+    for (const item of itens) item.classList.remove("registro-selecionado-teclado");
+
+    const item = itens[indice];
+    if (!item) return;
+
+    item.classList.add("registro-selecionado-teclado");
+    item.scrollIntoView({ block: "nearest" });
+}
+
+function existeModalAberto() {
+    return !!document.querySelector(".modal-overlay:not(.oculto)");
+}
+
+document.addEventListener("keydown", (e) => {
+    if (abaAtualNome !== "banco" || registroAbertoPasta || existeModalAberto()) return;
+    if (!["ArrowDown", "ArrowUp", "Enter"].includes(e.key)) return;
+
+    const alvo = e.target;
+    const emOutroCampo = alvo instanceof HTMLElement
+        && (alvo.isContentEditable || (alvo.tagName === "INPUT" && alvo.id !== "inputBuscaRegistros"));
+    if (emOutroCampo) return;
+
+    const itens = itensRegistroVisiveis();
+    if (itens.length === 0) return;
+
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+
+        indiceRegistroSelecionado = indiceRegistroSelecionado === -1
+            ? 0
+            : Math.min(itens.length - 1, Math.max(0, indiceRegistroSelecionado + (e.key === "ArrowDown" ? 1 : -1)));
+
+        marcarRegistroSelecionadoPorTeclado(indiceRegistroSelecionado);
+    } else if (e.key === "Enter" && indiceRegistroSelecionado !== -1) {
+        e.preventDefault();
+        const item = itens[indiceRegistroSelecionado];
+        if (item) alternarRegistro(item);
+    }
+});

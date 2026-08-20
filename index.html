@@ -22,16 +22,17 @@
 
             <h1>GERADOR DIEX DE LME</h1>
 
-            <!-- BARRA DE CONTROLE DO BANCO (TOPO) -->
+            <!-- BARRA DE PESQUISA DE PACIENTES (TOPO)
+                 v1.6.3: EXCLUIR e SALVAR saíram daqui — cadastrar e excluir
+                 paciente agora só acontece pela página BANCO (v1.6.2). O
+                 botão ao lado da pesquisa leva direto ao registro deste
+                 paciente na página BANCO. -->
             <div class="barra-banco-superior">
-                <button id="btnExcluirBanco" class="btn-banco-topo">EXCLUIR</button>
-
                 <div class="grupo-select-central">
                     <input type="text" id="inputPesquisaBanco" class="select-banco-topo" placeholder="Pesquisar Paciente..." list="listaPacientesBanco" autocomplete="off">
                     <datalist id="listaPacientesBanco"></datalist>
+                    <button type="button" id="btnAbrirNoBancoLme" class="btn-banco-topo" title="Abrir este paciente na página BANCO">ABRIR NO BANCO</button>
                 </div>
-
-                <button id="btnInserirBanco" class="btn-banco-topo">SALVAR</button>
             </div>
 
             <!-- CONJUNTO DE DROPZONES DE LME -->
@@ -187,6 +188,7 @@
         <div class="barra-banco-superior">
             <div class="grupo-select-central">
                 <input type="text" id="inputPesquisaExcel" class="select-banco-topo" placeholder="Pesquisar Paciente..." list="listaPacientesBanco" autocomplete="off">
+                <button type="button" id="btnAbrirNoBancoExcel" class="btn-banco-topo" title="Abrir este paciente na página BANCO">ABRIR NO BANCO</button>
             </div>
         </div>
 
@@ -236,6 +238,7 @@
             </select>
 
             <input type="text" id="inputPesquisaDoc" class="select-banco-topo" placeholder="Pesquisar Paciente..." list="listaPacientesBanco" autocomplete="off">
+            <button type="button" id="btnAbrirNoBancoDoc" class="btn-banco-topo" title="Abrir este paciente na página BANCO">ABRIR NO BANCO</button>
         </div>
 
         <div id="blocoLmeScan">
@@ -359,14 +362,6 @@
             <div class="cartao-status">
                 <div class="titulo">Pacientes</div>
                 <div class="valor" id="statusTotalTopo">0</div>
-            </div>
-            <div class="cartao-status">
-                <div class="titulo">Com pendências</div>
-                <div class="valor" id="statusPendentesTopo">0</div>
-            </div>
-            <div class="cartao-status">
-                <div class="titulo">Concluídos</div>
-                <div class="valor" id="statusConcluidosTopo">0</div>
             </div>
 
             <div class="cartao-status-acao" id="acaoConectarTopo">

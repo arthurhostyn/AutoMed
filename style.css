@@ -812,12 +812,16 @@ footer.recolhido #toggleAbas:hover {
     left: 50%;
     top: 50%;
     transform: translate(-50%, -50%);
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    width: 950px;
+    max-width: 92vw;
 }
 
 .select-banco-topo {
-    width: 800px;
-    min-width: 800px;
-    max-width: 800px;
+    flex: 1;
+    min-width: 0;
     height: 45px;
     padding: 0 15px;
     border: 10px solid #2f3e1d;
@@ -834,10 +838,18 @@ footer.recolhido #toggleAbas:hover {
     appearance: none;
 }
 
-#pagina-excel .select-banco-topo {
-    width: 1020px;
-    min-width: 1020px;
-    max-width: 1020px;
+/* v1.6.3: o botão que leva ao registro na página BANCO cola direto na
+   pesquisa — mesmo modelo visual do antigo SALVAR do LME. */
+.grupo-select-central .btn-banco-topo,
+#pagina-doc .botoesDoc .btn-banco-topo {
+    flex: 0 0 auto;
+    margin: 0;
+    white-space: nowrap;
+}
+
+#pagina-doc .botoesDoc #inputPesquisaDoc {
+    flex: 1;
+    min-width: 0;
 }
 
 .btn-banco-topo {
@@ -1229,6 +1241,13 @@ footer.recolhido #toggleAbas:hover {
 
 .registro-item.aberto > .registro-cabecalho {
     background: #1d2911;
+}
+
+/* Item destacado pela navegação de teclado (setas ↑/↓ + Enter) na
+   página BANCO — ver MÓDULO 25 do script.js. */
+.registro-item.registro-selecionado-teclado > .registro-cabecalho {
+    outline: 2px solid #ffffff;
+    outline-offset: -2px;
 }
 
 .registro-col {
